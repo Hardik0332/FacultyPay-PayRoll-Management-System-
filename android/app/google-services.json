@@ -1,13 +1,13 @@
 {
   "project_info": {
-    "project_number": "777985158543",
-    "project_id": "faculty-salary-system",
-    "storage_bucket": "faculty-salary-system.firebasestorage.app"
+    "project_number": "1078975084440",
+    "project_id": "fixed-project-new",
+    "storage_bucket": "fixed-project-new.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:777985158543:android:7ee209765f3f85ef482ffa",
+        "mobilesdk_app_id": "1:1078975084440:android:e4ce0e10c883a2a80c5ded",
         "android_client_info": {
           "package_name": "com.college.payroll"
         }
@@ -15,7 +15,7 @@
       "oauth_client": [],
       "api_key": [
         {
-          "current_key": "AIzaSyAgxxzJnXAX0lPsbpNkZ0ZCkh1oSmxFfKo"
+          "current_key": "AIzaSyAIUWzJ-KvXzF3ZpvZgDJfgkCNrsqtYcPg"
         }
       ],
       "services": {

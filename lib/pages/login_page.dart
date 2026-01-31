@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 class LoginPage extends StatelessWidget {
   const LoginPage({super.key});
@@ -71,9 +72,22 @@ class LoginPage extends StatelessWidget {
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xff45a182),
                   ),
-                  onPressed: () {
-                    // TODO: Firebase login
+                  onPressed: () async {
+                    try {
+                      await FirebaseAuth.instance.signInWithEmailAndPassword(
+                        email: "admin@college.com",
+                        password: "123456",
+                      );
+
+                      // TEMP routing for testing
+                      Navigator.pushReplacementNamed(context, '/admin/dashboard');
+                    } catch (e) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text(e.toString())),
+                      );
+                    }
                   },
+
                   child: const Text("Login"),
                 ),
               ),
