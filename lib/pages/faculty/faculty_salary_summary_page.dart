@@ -3,6 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart';
 import '../../widgets/app_sidebars.dart';
+import '../../services/receipt_service.dart'; // ✅ Make sure this import is here
 
 class FacultySalaryHistoryPage extends StatelessWidget {
   const FacultySalaryHistoryPage({super.key});
@@ -30,19 +31,23 @@ class FacultySalaryHistoryPage extends StatelessWidget {
                   const Text("View your monthly earnings and payment status.", style: TextStyle(color: Colors.grey)),
                   const SizedBox(height: 32),
 
-                  // We need the Hourly Rate first
+                  // We need the Hourly Rate & Profile Info first
                   StreamBuilder<DocumentSnapshot>(
                     stream: FirebaseFirestore.instance.collection('users').doc(user!.uid).snapshots(),
                     builder: (context, userSnap) {
                       if (!userSnap.hasData) return const LinearProgressIndicator();
 
                       final userData = userSnap.data!.data() as Map<String, dynamic>;
-                      // Handle double/int conversion safely
+
+                      // Handle data types safely
                       final double hourlyRate = (userData['hourlyRate'] is int)
                           ? (userData['hourlyRate'] as int).toDouble()
                           : (userData['hourlyRate'] as double? ?? 0.0);
 
-                      return _buildSalaryContent(user.uid, hourlyRate);
+                      final String name = userData['name'] ?? 'Faculty Member';
+                      final String dept = userData['department'] ?? 'General';
+
+                      return _buildSalaryContent(user.uid, hourlyRate, name, dept);
                     },
                   ),
                 ],
@@ -54,7 +59,7 @@ class FacultySalaryHistoryPage extends StatelessWidget {
     );
   }
 
-  Widget _buildSalaryContent(String uid, double hourlyRate) {
+  Widget _buildSalaryContent(String uid, double hourlyRate, String name, String dept) {
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance
           .collection('attendance')
@@ -88,7 +93,7 @@ class FacultySalaryHistoryPage extends StatelessWidget {
         double totalEarnedYTD = 0;
         double pendingPayment = 0;
 
-        snapshot.data!.docs.forEach((doc) {
+        for (var doc in snapshot.data!.docs) {
           int lectures = doc['lectures'];
           String status = doc['status'];
           if (status == 'Paid') {
@@ -96,7 +101,7 @@ class FacultySalaryHistoryPage extends StatelessWidget {
           } else if (status == 'Verified') {
             pendingPayment += (lectures * hourlyRate);
           }
-        });
+        }
 
         return Column(
           children: [
@@ -133,6 +138,8 @@ class FacultySalaryHistoryPage extends StatelessWidget {
                 month: entry.key,
                 docs: entry.value,
                 hourlyRate: hourlyRate,
+                facultyName: name, // ✅ Pass Name
+                department: dept,  // ✅ Pass Dept
               );
             }).toList(),
           ],
@@ -156,8 +163,16 @@ class _MonthlyRow extends StatelessWidget {
   final String month;
   final List<QueryDocumentSnapshot> docs;
   final double hourlyRate;
+  final String facultyName;
+  final String department;
 
-  const _MonthlyRow({required this.month, required this.docs, required this.hourlyRate});
+  const _MonthlyRow({
+    required this.month,
+    required this.docs,
+    required this.hourlyRate,
+    required this.facultyName,
+    required this.department,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -206,6 +221,7 @@ class _MonthlyRow extends StatelessWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
+          // LEFT SIDE: Month & Lectures
           Row(
             children: [
               Container(
@@ -224,6 +240,7 @@ class _MonthlyRow extends StatelessWidget {
             ],
           ),
 
+          // RIGHT SIDE: Amount, Status & Print Button
           Row(
             children: [
               Text("\₹${totalAmount.toStringAsFixed(2)}", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
@@ -236,6 +253,27 @@ class _MonthlyRow extends StatelessWidget {
                 ),
                 child: Text(statusText, style: TextStyle(color: statusColor, fontWeight: FontWeight.bold, fontSize: 12)),
               ),
+
+              // ✅ PRINT BUTTON (Only if Paid)
+              if (isAllPaid) ...[
+                const SizedBox(width: 12),
+                IconButton(
+                  icon: const Icon(Icons.print, color: Colors.grey),
+                  tooltip: "Download Receipt",
+                  onPressed: () {
+                    ReceiptService.printReceipt(
+                      facultyName: facultyName,
+                      department: department,
+                      month: month,
+                      totalLectures: totalLectures,
+                      ratePerLecture: hourlyRate,
+                      totalAmount: totalAmount,
+                      paymentDate: DateFormat('yyyy-MM-dd').format(DateTime.now()),
+                      receiptId: "SLIP-${month.replaceAll(' ', '-')}",
+                    );
+                  },
+                )
+              ]
             ],
           )
         ],

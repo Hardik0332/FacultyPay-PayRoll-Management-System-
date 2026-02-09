@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import '../../widgets/app_sidebars.dart'; // ✅ Import Shared Sidebar
+import 'package:intl/intl.dart';
+import '../../widgets/app_sidebars.dart';
+import '../../services/receipt_service.dart';
 
 class CalculateSalaryScreen extends StatelessWidget {
   const CalculateSalaryScreen({super.key});
@@ -187,11 +189,28 @@ class _SalaryRow extends StatelessWidget {
                   alignment: Alignment.centerRight,
                   child: isOwed
                       ? ElevatedButton(
-                    style: ElevatedButton.styleFrom(backgroundColor: const Color(0xff45a182)),
+                    style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xff45a182)),
                     onPressed: () => _payFaculty(context, uid, docs),
                     child: const Text("Pay Now"),
                   )
-                      : const Text("Receipt Generated", style: TextStyle(color: Colors.grey, fontSize: 12)),
+                      : OutlinedButton.icon(
+                    icon: const Icon(Icons.print, size: 16),
+                    label: const Text("Print"),
+                    onPressed: () {
+                      // CALL THE RECEIPT SERVICE
+                      ReceiptService.printReceipt(
+                        facultyName: name,
+                        department: dept,
+                        month: "Verified Lectures", // Or pass the specific month if available
+                        totalLectures: totalLectures,
+                        ratePerLecture: rate,
+                        totalAmount: totalAmount,
+                        paymentDate: DateFormat('yyyy-MM-dd').format(DateTime.now()),
+                        receiptId: "REC-${DateTime.now().millisecondsSinceEpoch}",
+                      );
+                    },
+                  ),
                 ),
               ),
             ],
