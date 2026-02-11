@@ -86,7 +86,7 @@ class ReceiptService {
         pw.Table.fromTextArray(
           headers: ["Description", "Quantity", "Rate", "Total"],
           data: [
-            ["Teaching Services - $month", "$lectures Lectures", "\$${rate.toStringAsFixed(2)}", "\$${total.toStringAsFixed(2)}"],
+            ["Teaching Services - $month", "$lectures Lectures", "\₹${rate.toStringAsFixed(2)}", "\₹${total.toStringAsFixed(2)}"],
           ],
           border: null,
           headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.white),
@@ -108,7 +108,7 @@ class ReceiptService {
             mainAxisAlignment: pw.MainAxisAlignment.end,
             children: [
               pw.Text("NET TOTAL: ", style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold)),
-              pw.Text("\$${total.toStringAsFixed(2)}", style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold, color: PdfColors.green)),
+              pw.Text("\₹${total.toStringAsFixed(2)}", style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold, color: PdfColors.green)),
             ],
           ),
         ),
