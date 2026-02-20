@@ -59,37 +59,53 @@ class CalculateSalaryScreen extends StatelessWidget {
                 Expanded(
                   child: Padding(
                     padding: EdgeInsets.all(isDesktop ? 32 : 16),
-                    child: StreamBuilder<QuerySnapshot>(
-                      // 1. Get All Faculty Members
-                      stream: FirebaseFirestore.instance
-                          .collection('users')
-                          .where('role', isEqualTo: 'faculty')
-                          .snapshots(),
-                      builder: (context, snapshot) {
-                        if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
-
-                        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-                          return const Center(child: Text("No faculty members found."));
-                        }
-
-                        final facultyDocs = snapshot.data!.docs;
-
-                        return Container(
-                          decoration: BoxDecoration(
-                            color: theme.cardColor,
-                            borderRadius: BorderRadius.circular(12),
-                            boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10)],
-                          ),
-                          child: ListView.separated(
-                            padding: const EdgeInsets.all(0),
-                            itemCount: facultyDocs.length,
-                            separatorBuilder: (c, i) => Divider(height: 1, color: Colors.grey.withOpacity(0.2)),
-                            itemBuilder: (context, index) {
-                              return _SalaryRow(facultyDoc: facultyDocs[index], isDesktop: isDesktop);
-                            },
-                          ),
-                        );
+                    // ✅ 1. WRAPPED IN REFRESH INDICATOR
+                    child: RefreshIndicator(
+                      color: theme.primaryColor,
+                      backgroundColor: theme.cardColor,
+                      onRefresh: () async {
+                        await Future.delayed(const Duration(milliseconds: 1200));
                       },
+                      child: StreamBuilder<QuerySnapshot>(
+                        stream: FirebaseFirestore.instance
+                            .collection('users')
+                            .where('role', isEqualTo: 'faculty')
+                            .snapshots(),
+                        builder: (context, snapshot) {
+                          if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
+
+                          // ✅ 2. Allow dragging even if no data is found
+                          if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                            return ListView(
+                              physics: const AlwaysScrollableScrollPhysics(),
+                              children: const [
+                                SizedBox(height: 100),
+                                Center(child: Text("No faculty members found."))
+                              ],
+                            );
+                          }
+
+                          final facultyDocs = snapshot.data!.docs;
+
+                          return Container(
+                            decoration: BoxDecoration(
+                              color: theme.cardColor,
+                              borderRadius: BorderRadius.circular(12),
+                              boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10)],
+                            ),
+                            child: ListView.separated(
+                              // ✅ 3. ENABLES PULL TO REFRESH ON THE LIST
+                              physics: const AlwaysScrollableScrollPhysics(),
+                              padding: const EdgeInsets.all(0),
+                              itemCount: facultyDocs.length,
+                              separatorBuilder: (c, i) => Divider(height: 1, color: Colors.grey.withOpacity(0.2)),
+                              itemBuilder: (context, index) {
+                                return _SalaryRow(facultyDoc: facultyDocs[index], isDesktop: isDesktop);
+                              },
+                            ),
+                          );
+                        },
+                      ),
                     ),
                   ),
                 ),
@@ -120,7 +136,6 @@ class _SalaryRow extends StatelessWidget {
         ? (data['hourlyRate'] as int).toDouble()
         : (data['hourlyRate'] as double? ?? 0.0);
 
-    // ✅ FIX: Stream BOTH Verified AND Paid records
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance
           .collection('attendance')
@@ -139,8 +154,8 @@ class _SalaryRow extends StatelessWidget {
         int owedLectures = 0;
         int paidLecturesThisMonth = 0;
         List<QueryDocumentSnapshot> docsToPay = [];
+        List<QueryDocumentSnapshot> paidDocsThisMonth = [];
 
-        // ✅ FIX: Segregate records into Pending vs. Already Paid This Month
         for (var doc in docs) {
           String status = doc['status'];
           DateTime docDate = (doc['date'] as Timestamp).toDate();
@@ -150,6 +165,7 @@ class _SalaryRow extends StatelessWidget {
             docsToPay.add(doc);
           } else if (status == 'Paid' && docDate.month == now.month && docDate.year == now.year) {
             paidLecturesThisMonth += (doc['lectures'] as int);
+            paidDocsThisMonth.add(doc);
           }
         }
 
@@ -158,7 +174,6 @@ class _SalaryRow extends StatelessWidget {
 
         bool isOwed = owedAmount > 0;
 
-        // Display what is currently owed, OR what was paid this month
         int displayLectures = isOwed ? owedLectures : paidLecturesThisMonth;
         double displayAmount = isOwed ? owedAmount : paidAmountThisMonth;
 
@@ -183,12 +198,11 @@ class _SalaryRow extends StatelessWidget {
           ],
         );
 
-        // ✅ FIX: Action Button Logic
         Widget actionBtn;
         if (isOwed) {
           actionBtn = ElevatedButton(
               style: ElevatedButton.styleFrom(backgroundColor: const Color(0xff45a182)),
-              onPressed: () => _payFaculty(context, uid, docsToPay), // Pass only Verified docs
+              onPressed: () => _payFaculty(context, uid, docsToPay),
               child: const Text("Pay Now")
           );
         } else if (paidLecturesThisMonth > 0) {
@@ -196,6 +210,21 @@ class _SalaryRow extends StatelessWidget {
               icon: const Icon(Icons.print, size: 16),
               label: const Text("Print"),
               onPressed: () {
+                List<List<String>> receiptDetails = [];
+                for (var doc in paidDocsThisMonth) {
+                  final d = doc.data() as Map<String, dynamic>;
+                  DateTime dt = (d['date'] as Timestamp).toDate();
+                  int lecs = d['lectures'] as int;
+                  double rowTotal = lecs * rate;
+                  receiptDetails.add([
+                    DateFormat('dd MMM yyyy').format(dt),
+                    d['subject'] ?? '-',
+                    lecs.toString(),
+                    "₹ ${rate.toStringAsFixed(2)}",
+                    "₹ ${rowTotal.toStringAsFixed(2)}"
+                  ]);
+                }
+
                 String currentMonthLabel = DateFormat('MMMM yyyy').format(DateTime.now());
                 ReceiptService.printReceipt(
                   facultyName: name,
@@ -203,14 +232,14 @@ class _SalaryRow extends StatelessWidget {
                   month: currentMonthLabel,
                   totalLectures: displayLectures,
                   ratePerLecture: rate,
-                  totalAmount: displayAmount, // Passes the actual paid amount to PDF
+                  totalAmount: displayAmount,
                   paymentDate: DateFormat('yyyy-MM-dd').format(DateTime.now()),
                   receiptId: "REC-${DateTime.now().millisecondsSinceEpoch}",
+                  lectureDetails: receiptDetails,
                 );
               }
           );
         } else {
-          // If they are owed nothing AND were paid nothing this month, hide buttons.
           actionBtn = const SizedBox.shrink();
         }
 
@@ -228,7 +257,6 @@ class _SalaryRow extends StatelessWidget {
             ),
           );
         } else {
-          // Mobile View Stack
           return Padding(
             padding: const EdgeInsets.all(20),
             child: Column(
@@ -247,7 +275,6 @@ class _SalaryRow extends StatelessWidget {
     );
   }
 
-  // 4. PAY FUNCTION
   Future<void> _payFaculty(BuildContext context, String uid, List<QueryDocumentSnapshot> docs) async {
     bool confirm = await showDialog(
         context: context,

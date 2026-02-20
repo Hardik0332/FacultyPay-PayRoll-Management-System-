@@ -1,8 +1,6 @@
-import 'dart:typed_data';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
-import 'package:intl/intl.dart';
 
 class ReceiptService {
   /// Generates and Prints a PDF Receipt
@@ -15,26 +13,26 @@ class ReceiptService {
     required double totalAmount,
     required String paymentDate,
     required String receiptId,
+    required List<List<String>> lectureDetails, // ✅ NEW: Accepts detailed lecture breakdown
   }) async {
     final doc = pw.Document();
 
     // 1. LOAD BOTH REGULAR AND BOLD FONTS
     final ttfRegular = await PdfGoogleFonts.robotoRegular();
-    final ttfBold = await PdfGoogleFonts.robotoBold(); // ✅ Required for Bold Text
+    final ttfBold = await PdfGoogleFonts.robotoBold();
 
     doc.addPage(
       pw.Page(
         pageFormat: PdfPageFormat.a4,
         build: (pw.Context context) {
-          // 2. APPLY BOTH FONTS TO THE THEME
           return pw.Theme(
             data: pw.ThemeData.withFont(
               base: ttfRegular,
-              bold: ttfBold, // ✅ Tells PDF to use Roboto for bold text too
+              bold: ttfBold,
             ),
             child: buildReceiptLayout(
                 facultyName, department, month, totalLectures,
-                ratePerLecture, totalAmount, paymentDate, receiptId
+                ratePerLecture, totalAmount, paymentDate, receiptId, lectureDetails // ✅ Pass to layout builder
             ),
           );
         },
@@ -49,7 +47,7 @@ class ReceiptService {
 
   static pw.Widget buildReceiptLayout(
       String name, String dept, String month, int lectures,
-      double rate, double total, String date, String id) {
+      double rate, double total, String date, String id, List<List<String>> lectureDetails) {
 
     return pw.Column(
       crossAxisAlignment: pw.CrossAxisAlignment.start,
@@ -76,7 +74,8 @@ class ReceiptService {
               children: [
                 pw.Text("To:", style: pw.TextStyle(color: PdfColors.grey)),
                 pw.Text(name, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 16)),
-                pw.Text("Dept: $dept"),
+                pw.Text("Dept: ${dept.toUpperCase()}"),
+                pw.Text("Hourly Rate: ₹ ${rate.toStringAsFixed(2)} / hr", style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
               ],
             ),
             pw.Column(
@@ -91,21 +90,21 @@ class ReceiptService {
         ),
         pw.SizedBox(height: 40),
 
-        // TABLE
+        // ✅ DETAILED DYNAMIC TABLE
         pw.Table.fromTextArray(
-          headers: ["Description", "Quantity", "Rate", "Total"],
-          data: [
-            ["Teaching Services - $month", "$lectures Lectures", "₹ ${rate.toStringAsFixed(2)}", "₹ ${total.toStringAsFixed(2)}"],
-          ],
+          headers: ["Date", "Subject", "Lectures", "Rate", "Total"],
+          data: lectureDetails, // ✅ Injects every single lecture here
           border: null,
           headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.white),
           headerDecoration: const pw.BoxDecoration(color: PdfColor.fromInt(0xff45a182)),
+          rowDecoration: const pw.BoxDecoration(border: pw.Border(bottom: pw.BorderSide(color: PdfColors.grey300))),
           cellHeight: 30,
           cellAlignments: {
             0: pw.Alignment.centerLeft,
-            1: pw.Alignment.center,
-            2: pw.Alignment.centerRight,
+            1: pw.Alignment.centerLeft,
+            2: pw.Alignment.center,
             3: pw.Alignment.centerRight,
+            4: pw.Alignment.centerRight,
           },
         ),
         pw.Divider(),
@@ -116,7 +115,6 @@ class ReceiptService {
           child: pw.Row(
             mainAxisAlignment: pw.MainAxisAlignment.end,
             children: [
-              // ✅ EXPLICITLY LABELED AS AMOUNT PAID
               pw.Text("TOTAL AMOUNT PAID: ", style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold)),
               pw.Text("₹ ${total.toStringAsFixed(2)}", style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold, color: PdfColors.green)),
             ],

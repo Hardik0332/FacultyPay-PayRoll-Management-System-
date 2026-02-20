@@ -70,7 +70,6 @@ class _AdminReportsPageState extends State<AdminReportsPage> {
       firstDate: DateTime(2023),
       lastDate: DateTime.now(),
       helpText: "Select any day in the desired month",
-      // ✅ Theme handles the date picker colors automatically
     );
     if (picked != null) {
       setState(() => _selectedMonth = picked);
@@ -80,10 +79,9 @@ class _AdminReportsPageState extends State<AdminReportsPage> {
   @override
   Widget build(BuildContext context) {
     final isDesktop = MediaQuery.of(context).size.width > 800;
-    final theme = Theme.of(context); // ✅ Grab theme for dynamic colors
+    final theme = Theme.of(context);
 
     return Scaffold(
-      // ✅ Background inherits automatically from main.dart
       appBar: isDesktop
           ? null
           : AppBar(
@@ -99,71 +97,82 @@ class _AdminReportsPageState extends State<AdminReportsPage> {
         children: [
           if (isDesktop) const AdminSidebar(activeRoute: '/admin/reports'),
           Expanded(
-            child: SingleChildScrollView(
-              padding: EdgeInsets.all(isDesktop ? 32 : 16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text("Attendance Reports", style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 32),
+            // ✅ ONLY ADDED REFRESH INDICATOR HERE
+            child: RefreshIndicator(
+              color: theme.primaryColor,
+              backgroundColor: theme.cardColor,
+              onRefresh: () async {
+                await _fetchFacultyData();
+                setState(() {});
+              },
+              child: SingleChildScrollView(
+                // ✅ ADDED PHYSICS FOR SCROLLING
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: EdgeInsets.all(isDesktop ? 32 : 16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text("Attendance Reports", style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 32),
 
-                  // FILTER CARD
-                  Container(
-                    padding: const EdgeInsets.all(24),
-                    decoration: BoxDecoration(
-                      color: theme.cardColor, // ✅ Dynamic Card Color
-                      borderRadius: BorderRadius.circular(12),
-                      boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10)],
+                    // FILTER CARD
+                    Container(
+                      padding: const EdgeInsets.all(24),
+                      decoration: BoxDecoration(
+                        color: theme.cardColor,
+                        borderRadius: BorderRadius.circular(12),
+                        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10)],
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text("Generate PDF Report", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                          const SizedBox(height: 24),
+
+                          // ROW 1: FACULTY & PERIOD SELECTION
+                          if (isDesktop)
+                            Row(
+                              children: [
+                                Expanded(child: _buildFacultyDropdown(theme)),
+                                const SizedBox(width: 24),
+                                Expanded(child: _buildPeriodDropdown(theme)),
+                              ],
+                            )
+                          else
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                _buildFacultyDropdown(theme),
+                                const SizedBox(height: 16),
+                                _buildPeriodDropdown(theme),
+                              ],
+                            ),
+
+                          const SizedBox(height: 16),
+
+                          // ROW 2: DYNAMIC FILTERS & PRINT BUTTON
+                          if (isDesktop)
+                            Row(
+                              children: [
+                                Expanded(child: _buildDynamicDateFilter(theme)),
+                                const SizedBox(width: 24),
+                                _buildPrintButton(),
+                              ],
+                            )
+                          else
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                _buildDynamicDateFilter(theme),
+                                const SizedBox(height: 24),
+                                _buildPrintButton(),
+                              ],
+                            ),
+                        ],
+                      ),
                     ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text("Generate PDF Report", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                        const SizedBox(height: 24),
-
-                        // ROW 1: FACULTY & PERIOD SELECTION
-                        if (isDesktop)
-                          Row(
-                            children: [
-                              Expanded(child: _buildFacultyDropdown(theme)),
-                              const SizedBox(width: 24),
-                              Expanded(child: _buildPeriodDropdown(theme)),
-                            ],
-                          )
-                        else
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              _buildFacultyDropdown(theme),
-                              const SizedBox(height: 16),
-                              _buildPeriodDropdown(theme),
-                            ],
-                          ),
-
-                        const SizedBox(height: 16),
-
-                        // ROW 2: DYNAMIC FILTERS & PRINT BUTTON
-                        if (isDesktop)
-                          Row(
-                            children: [
-                              Expanded(child: _buildDynamicDateFilter(theme)),
-                              const SizedBox(width: 24),
-                              _buildPrintButton(),
-                            ],
-                          )
-                        else
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              _buildDynamicDateFilter(theme),
-                              const SizedBox(height: 24),
-                              _buildPrintButton(),
-                            ],
-                          ),
-                      ],
-                    ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),
@@ -177,7 +186,7 @@ class _AdminReportsPageState extends State<AdminReportsPage> {
   Widget _buildFacultyDropdown(ThemeData theme) {
     return DropdownButtonFormField<String>(
       isExpanded: true,
-      dropdownColor: theme.cardColor, // ✅ Dynamic dropdown background
+      dropdownColor: theme.cardColor,
       decoration: const InputDecoration(labelText: "Select Faculty", border: OutlineInputBorder(), contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 12)),
       value: selectedFacultyId,
       items: [
@@ -191,7 +200,7 @@ class _AdminReportsPageState extends State<AdminReportsPage> {
   Widget _buildPeriodDropdown(ThemeData theme) {
     return DropdownButtonFormField<String>(
       isExpanded: true,
-      dropdownColor: theme.cardColor, // ✅ Dynamic dropdown background
+      dropdownColor: theme.cardColor,
       decoration: const InputDecoration(labelText: "Report Period", border: OutlineInputBorder(), contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 12)),
       value: _reportPeriod,
       items: const [
@@ -210,7 +219,7 @@ class _AdminReportsPageState extends State<AdminReportsPage> {
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 15),
           decoration: BoxDecoration(
-              border: Border.all(color: Colors.grey.withOpacity(0.4)), // ✅ Dynamic border
+              border: Border.all(color: Colors.grey.withOpacity(0.4)),
               borderRadius: BorderRadius.circular(4)
           ),
           child: Row(
@@ -224,7 +233,7 @@ class _AdminReportsPageState extends State<AdminReportsPage> {
       );
     } else if (_reportPeriod == 'Financial Year') {
       return DropdownButtonFormField<String>(
-        dropdownColor: theme.cardColor, // ✅ Dynamic dropdown background
+        dropdownColor: theme.cardColor,
         decoration: const InputDecoration(labelText: "Select Financial Year", border: OutlineInputBorder(), contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 12)),
         value: _selectedFY,
         items: _getFinancialYearOptions().map((fy) => DropdownMenuItem(value: fy, child: Text("FY $fy"))).toList(),

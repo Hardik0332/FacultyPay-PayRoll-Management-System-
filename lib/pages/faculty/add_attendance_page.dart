@@ -15,12 +15,10 @@ class _FacultyAddAttendancePageState extends State<FacultyAddAttendancePage> {
   DateTime? selectedDate;
   bool isLoading = false;
 
-  // Track lectures and custom fields
   List<Map<String, dynamic>> lectures = [
     {'class': null, 'subject': null, 'customClass': null, 'customSubject': null}
   ];
 
-  // The Master List
   final Map<String, List<String>> courseCurriculum = {
     'BSC.CS': ['Java Programming', 'Data Structures', 'Python', 'Web Development', 'Operating Systems'],
     'BCA': ['C Programming', 'Database (DBMS)', 'Networking', 'Mathematics', 'Software Engineering'],
@@ -69,116 +67,127 @@ class _FacultyAddAttendancePageState extends State<FacultyAddAttendancePage> {
           if (isDesktop) const FacultySidebar(activeRoute: '/faculty/add-attendance'),
 
           Expanded(
-            child: SingleChildScrollView(
-              padding: EdgeInsets.all(isDesktop ? 40 : 16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text("Record Daily Attendance", style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 8),
-                  const Text("Select your class and subject for each lecture conducted.", style: TextStyle(color: Colors.grey)),
-                  const SizedBox(height: 32),
+            // ✅ REFRESH INDICATOR APPLIED HERE
+            child: RefreshIndicator(
+              color: theme.primaryColor,
+              backgroundColor: theme.cardColor,
+              onRefresh: () async {
+                await Future.delayed(const Duration(milliseconds: 1200));
+                // Optional: Force a state rebuild if you want the date to reset, etc.
+                setState(() {});
+              },
+              child: SingleChildScrollView(
+                // ✅ ALWAYS SCROLLABLE
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: EdgeInsets.all(isDesktop ? 40 : 16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text("Record Daily Attendance", style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 8),
+                    const Text("Select your class and subject for each lecture conducted.", style: TextStyle(color: Colors.grey)),
+                    const SizedBox(height: 32),
 
-                  // --- FORM CONTAINER ---
-                  Container(
-                    padding: EdgeInsets.all(isDesktop ? 32 : 20),
-                    decoration: BoxDecoration(
-                      color: theme.cardColor,
-                      borderRadius: BorderRadius.circular(12),
-                      boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10)],
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text("Date of Lectures *", style: TextStyle(fontWeight: FontWeight.bold)),
-                        const SizedBox(height: 8),
-                        InkWell(
-                          onTap: _pickDate,
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-                            decoration: BoxDecoration(
-                              border: Border.all(color: Colors.grey.withOpacity(0.4)),
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Row(
-                              children: [
-                                const Icon(Icons.calendar_month, color: Colors.grey),
-                                const SizedBox(width: 12),
-                                Text(
-                                  selectedDate == null ? "Select Date" : DateFormat('EEEE, MMM dd, yyyy').format(selectedDate!),
-                                  style: const TextStyle(fontSize: 16),
-                                ),
-                              ],
+                    // --- FORM CONTAINER ---
+                    Container(
+                      padding: EdgeInsets.all(isDesktop ? 32 : 20),
+                      decoration: BoxDecoration(
+                        color: theme.cardColor,
+                        borderRadius: BorderRadius.circular(12),
+                        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10)],
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text("Date of Lectures *", style: TextStyle(fontWeight: FontWeight.bold)),
+                          const SizedBox(height: 8),
+                          InkWell(
+                            onTap: _pickDate,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                              decoration: BoxDecoration(
+                                border: Border.all(color: Colors.grey.withOpacity(0.4)),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Row(
+                                children: [
+                                  const Icon(Icons.calendar_month, color: Colors.grey),
+                                  const SizedBox(width: 12),
+                                  Text(
+                                    selectedDate == null ? "Select Date" : DateFormat('EEEE, MMM dd, yyyy').format(selectedDate!),
+                                    style: const TextStyle(fontSize: 16),
+                                  ),
+                                ],
+                              ),
                             ),
                           ),
-                        ),
-                        const SizedBox(height: 32),
-                        const Text("Lecture Details", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                        const SizedBox(height: 16),
+                          const SizedBox(height: 32),
+                          const Text("Lecture Details", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                          const SizedBox(height: 16),
 
-                        ...lectures.asMap().entries.map((entry) {
-                          int index = entry.key;
-                          Map<String, dynamic> lecture = entry.value;
+                          ...lectures.asMap().entries.map((entry) {
+                            int index = entry.key;
+                            Map<String, dynamic> lecture = entry.value;
 
-                          return Padding(
-                            padding: const EdgeInsets.only(bottom: 24),
-                            child: Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Container(
-                                  margin: const EdgeInsets.only(top: 12, right: 16),
-                                  padding: const EdgeInsets.all(8),
-                                  decoration: BoxDecoration(color: Colors.grey.withOpacity(0.2), shape: BoxShape.circle),
-                                  child: Text("${index + 1}", style: const TextStyle(fontWeight: FontWeight.bold)),
-                                ),
-                                Expanded(child: _buildLectureFields(index, lecture, theme, isDesktop)),
-                                if (lectures.length > 1)
-                                  Padding(
-                                    padding: const EdgeInsets.only(top: 4, left: 8),
-                                    child: IconButton(
-                                      icon: const Icon(Icons.delete_outline, color: Colors.red),
-                                      onPressed: () => setState(() => lectures.removeAt(index)),
-                                    ),
-                                  )
-                              ],
-                            ),
-                          );
-                        }).toList(),
+                            return Padding(
+                              padding: const EdgeInsets.only(bottom: 24),
+                              child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Container(
+                                    margin: const EdgeInsets.only(top: 12, right: 16),
+                                    padding: const EdgeInsets.all(8),
+                                    decoration: BoxDecoration(color: Colors.grey.withOpacity(0.2), shape: BoxShape.circle),
+                                    child: Text("${index + 1}", style: const TextStyle(fontWeight: FontWeight.bold)),
+                                  ),
+                                  Expanded(child: _buildLectureFields(index, lecture, theme, isDesktop)),
+                                  if (lectures.length > 1)
+                                    Padding(
+                                      padding: const EdgeInsets.only(top: 4, left: 8),
+                                      child: IconButton(
+                                        icon: const Icon(Icons.delete_outline, color: Colors.red),
+                                        onPressed: () => setState(() => lectures.removeAt(index)),
+                                      ),
+                                    )
+                                ],
+                              ),
+                            );
+                          }).toList(),
 
-                        const SizedBox(height: 16),
-                        TextButton.icon(
-                          onPressed: () => setState(() => lectures.add({'class': null, 'subject': null, 'customClass': null, 'customSubject': null})),
-                          icon: const Icon(Icons.add_circle_outline, color: Color(0xff45a182)),
-                          label: const Text("Add Another Lecture", style: TextStyle(color: Color(0xff45a182), fontWeight: FontWeight.bold)),
-                        ),
-
-                        const SizedBox(height: 32),
-                        const Divider(),
-                        const SizedBox(height: 16),
-
-                        Align(
-                          alignment: Alignment.centerRight,
-                          child: ElevatedButton.icon(
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: const Color(0xff45a182),
-                              padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
-                            ),
-                            icon: isLoading ? const SizedBox() : const Icon(Icons.check_circle),
-                            label: Text(isLoading ? "Submitting..." : "Submit Attendance", style: const TextStyle(fontSize: 16, color: Colors.white)),
-                            onPressed: isLoading ? null : _submitAllAttendance,
+                          const SizedBox(height: 16),
+                          TextButton.icon(
+                            onPressed: () => setState(() => lectures.add({'class': null, 'subject': null, 'customClass': null, 'customSubject': null})),
+                            icon: const Icon(Icons.add_circle_outline, color: Color(0xff45a182)),
+                            label: const Text("Add Another Lecture", style: TextStyle(color: Color(0xff45a182), fontWeight: FontWeight.bold)),
                           ),
-                        ),
-                      ],
+
+                          const SizedBox(height: 32),
+                          const Divider(),
+                          const SizedBox(height: 16),
+
+                          Align(
+                            alignment: Alignment.centerRight,
+                            child: ElevatedButton.icon(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xff45a182),
+                                padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+                              ),
+                              icon: isLoading ? const SizedBox() : const Icon(Icons.check_circle),
+                              label: Text(isLoading ? "Submitting..." : "Submit Attendance", style: const TextStyle(fontSize: 16, color: Colors.white)),
+                              onPressed: isLoading ? null : _submitAllAttendance,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
 
-                  const SizedBox(height: 40),
+                    const SizedBox(height: 40),
 
-                  // ✅ RESTORED RECENT SUBMISSIONS SECTION
-                  const Text("Recent Submissions", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 16),
-                  _buildRecentSubmissions(theme),
-                ],
+                    const Text("Recent Submissions", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 16),
+                    _buildRecentSubmissions(theme),
+                  ],
+                ),
               ),
             ),
           ),
@@ -271,7 +280,6 @@ class _FacultyAddAttendancePageState extends State<FacultyAddAttendancePage> {
     }
   }
 
-  // ✅ RECENT SUBMISSIONS WIDGET
   Widget _buildRecentSubmissions(ThemeData theme) {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return const SizedBox.shrink();
@@ -299,7 +307,6 @@ class _FacultyAddAttendancePageState extends State<FacultyAddAttendancePage> {
           );
         }
 
-        // Sort locally by 'submittedAt' to ensure the newest is on top
         docs.sort((a, b) {
           final aData = a.data() as Map<String, dynamic>;
           final bData = b.data() as Map<String, dynamic>;
@@ -309,7 +316,6 @@ class _FacultyAddAttendancePageState extends State<FacultyAddAttendancePage> {
           return bTime.compareTo(aTime);
         });
 
-        // Show only the top 5 most recent
         final recentDocs = docs.take(5).toList();
 
         return Column(

@@ -11,12 +11,9 @@ class FacultyDashboard extends StatelessWidget {
   Widget build(BuildContext context) {
     final user = FirebaseAuth.instance.currentUser;
     final isDesktop = MediaQuery.of(context).size.width > 800;
-
-    // ✅ 1. Grab theme for dynamic backgrounds
     final theme = Theme.of(context);
 
     return Scaffold(
-      // ✅ 2. Scaffold background automatically inherited
       appBar: isDesktop
           ? null
           : AppBar(
@@ -30,25 +27,34 @@ class FacultyDashboard extends StatelessWidget {
       ),
       body: Row(
         children: [
-          // SHOW SIDEBAR ONLY ON DESKTOP
           if (isDesktop) const FacultySidebar(activeRoute: '/faculty/dashboard'),
 
           // MAIN CONTENT
           Expanded(
-            child: SingleChildScrollView(
-              padding: EdgeInsets.all(isDesktop ? 32 : 16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _buildHeader(context, user), // ✅ Pass context for theme access
-                  const SizedBox(height: 32),
-                  _buildStatsRow(user, isDesktop),
-                  const SizedBox(height: 32),
-                  const Text("Recent Attendance History",
-                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 16),
-                  _buildRecentActivityTable(context, user), // ✅ Pass context for theme access
-                ],
+            // ✅ 1. Wrap the content in a RefreshIndicator
+            child: RefreshIndicator(
+              color: theme.primaryColor,
+              backgroundColor: theme.cardColor,
+              onRefresh: () async {
+                await Future.delayed(const Duration(milliseconds: 1200));
+              },
+              child: SingleChildScrollView(
+                // ✅ 2. Always scrollable physics
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: EdgeInsets.all(isDesktop ? 32 : 16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildHeader(context, user),
+                    const SizedBox(height: 32),
+                    _buildStatsRow(user, isDesktop),
+                    const SizedBox(height: 32),
+                    const Text("Recent Attendance History",
+                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 16),
+                    _buildRecentActivityTable(context, user),
+                  ],
+                ),
               ),
             ),
           ),
@@ -86,7 +92,7 @@ class FacultyDashboard extends StatelessWidget {
             const SizedBox(width: 16),
             CircleAvatar(
               radius: 24,
-              backgroundColor: theme.primaryColor.withOpacity(0.1), // ✅ Dynamic circle background
+              backgroundColor: theme.primaryColor.withOpacity(0.1),
               child: Icon(Icons.person, color: theme.primaryColor),
             )
           ],
@@ -125,11 +131,9 @@ class FacultyDashboard extends StatelessWidget {
               }
               double earnings = verifiedLectures * rate;
 
-              // RESPONSIVE LAYOUT FOR CARDS
               if (!isDesktop) {
                 return Column(
                   children: [
-                    // ✅ Replaced Icons.attach_money with Icons.currency_rupee here
                     _StatCard(title: "Total Earnings", value: "\₹${earnings.toStringAsFixed(2)}", icon: Icons.currency_rupee, color: const Color(0xff45a182)),
                     const SizedBox(height: 16),
                     _StatCard(title: "Total Lectures", value: "$totalLectures", icon: Icons.class_outlined, color: Colors.blueAccent),
@@ -141,7 +145,6 @@ class FacultyDashboard extends StatelessWidget {
 
               return Row(
                 children: [
-                  // ✅ Replaced Icons.attach_money with Icons.currency_rupee here
                   Expanded(child: _StatCard(title: "Total Earnings", value: "\₹${earnings.toStringAsFixed(2)}", icon: Icons.currency_rupee, color: const Color(0xff45a182))),
                   const SizedBox(width: 20),
                   Expanded(child: _StatCard(title: "Total Lectures", value: "$totalLectures", icon: Icons.class_outlined, color: Colors.blueAccent)),
@@ -155,7 +158,7 @@ class FacultyDashboard extends StatelessWidget {
   }
 
   Widget _buildRecentActivityTable(BuildContext context, User? user) {
-    final theme = Theme.of(context); // ✅ Theme access
+    final theme = Theme.of(context);
 
     if (user == null) return const SizedBox();
 
@@ -179,7 +182,7 @@ class FacultyDashboard extends StatelessWidget {
 
         return Container(
           decoration: BoxDecoration(
-            color: theme.cardColor, // ✅ Dynamic Card Color
+            color: theme.cardColor,
             borderRadius: BorderRadius.circular(12),
             boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4))],
           ),
@@ -225,13 +228,13 @@ class _StatCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context); // ✅ Theme access
+    final theme = Theme.of(context);
 
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        color: theme.cardColor, // ✅ Dynamic Card Color
+        color: theme.cardColor,
         borderRadius: BorderRadius.circular(12),
         boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4))],
       ),

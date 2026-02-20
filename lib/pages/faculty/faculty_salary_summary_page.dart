@@ -12,112 +12,126 @@ class FacultySalaryHistoryPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final user = FirebaseAuth.instance.currentUser;
-    // ✅ 1. Grab theme context
+    final isDesktop = MediaQuery.of(context).size.width > 800;
     final theme = Theme.of(context);
 
     return Scaffold(
-      // ✅ 2. Scaffold background automatically inherited
-      appBar: MediaQuery.of(context).size.width > 800
+      appBar: isDesktop
           ? null
           : AppBar(title: const Text("Salary History"), elevation: 0),
-      drawer: MediaQuery.of(context).size.width > 800
+      drawer: isDesktop
           ? null
           : const Drawer(child: FacultySidebar(activeRoute: '/faculty/salary-history')),
 
       body: Row(
         children: [
-          // SIDEBAR (Active Route: Salary History)
-          if (MediaQuery.of(context).size.width > 800)
+          if (isDesktop)
             const FacultySidebar(activeRoute: '/faculty/salary-history'),
 
-          // MAIN CONTENT
           Expanded(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(32),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // HEADER ROW WITH PRINT BUTTON
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text("Salary History", style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
-                          const SizedBox(height: 8),
-                          Text("View monthly earnings and payment status.", style: TextStyle(color: theme.textTheme.bodyMedium?.color?.withOpacity(0.6))),
-                        ],
-                      ),
-                      // PRINT FULL HISTORY BUTTON
-                      IconButton(
-                        icon: const Icon(Icons.print, color: Color(0xff45a182), size: 28),
-                        tooltip: "Print Full Statement",
-                        onPressed: () async {
-                          if (user == null) return;
+            // ✅ 1. ADDED PULL-TO-REFRESH
+            child: RefreshIndicator(
+              color: theme.primaryColor,
+              backgroundColor: theme.cardColor,
+              onRefresh: () async {
+                await Future.delayed(const Duration(milliseconds: 1200));
+              },
+              child: SingleChildScrollView(
+                // ✅ 2. ALWAYS SCROLLABLE SO YOU CAN DRAG EVEN IF NOT FULL
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: EdgeInsets.all(isDesktop ? 32 : 16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text("Salary History", style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
+                              const SizedBox(height: 8),
+                              Text("View monthly earnings and payment status.", style: TextStyle(color: theme.textTheme.bodyMedium?.color?.withOpacity(0.6))),
+                            ],
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.print, color: Color(0xff45a182), size: 28),
+                          tooltip: "Print Full Statement",
+                          onPressed: () async {
+                            if (user == null) return;
 
-                          final userDoc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
-                          double hourlyRate = 0.0;
-                          if (userDoc.exists) {
-                            var data = userDoc.data()!;
-                            hourlyRate = (data['hourlyRate'] is int)
-                                ? (data['hourlyRate'] as int).toDouble()
-                                : (data['hourlyRate'] as double? ?? 0.0);
-                          }
+                            final userDoc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
+                            double hourlyRate = 0.0;
+                            String name = 'Faculty Member';
+                            String dept = 'General';
 
-                          final snapshot = await FirebaseFirestore.instance
-                              .collection('attendance')
-                              .where('uid', isEqualTo: user.uid)
-                              .orderBy('date', descending: true)
-                              .get();
+                            if (userDoc.exists) {
+                              var data = userDoc.data()!;
+                              hourlyRate = (data['hourlyRate'] is int)
+                                  ? (data['hourlyRate'] as int).toDouble()
+                                  : (data['hourlyRate'] as double? ?? 0.0);
 
-                          if (snapshot.docs.isNotEmpty) {
+                              name = data['name'] ?? 'Faculty Member';
+                              dept = data['department'] ?? 'General';
+                            }
 
-                            double totalPaid = 0.0;
-                            for (var doc in snapshot.docs) {
-                              if (doc['status'] == 'Paid') {
-                                totalPaid += (doc['lectures'] as int) * hourlyRate;
+                            final snapshot = await FirebaseFirestore.instance
+                                .collection('attendance')
+                                .where('uid', isEqualTo: user.uid)
+                                .orderBy('date', descending: true)
+                                .get();
+
+                            if (snapshot.docs.isNotEmpty) {
+                              double totalPaid = 0.0;
+                              for (var doc in snapshot.docs) {
+                                if (doc['status'] == 'Paid') {
+                                  totalPaid += (doc['lectures'] as int) * hourlyRate;
+                                }
+                              }
+
+                              ReportService.printHistoryReport(
+                                title: "Faculty Statement",
+                                subtitle: "Full History of Lectures and Payment Status",
+                                docs: snapshot.docs,
+                                isAdminReport: false,
+                                singleFacultyName: name,
+                                singleFacultyDept: dept,
+                                singleFacultyRate: hourlyRate,
+                                totalAmountPaid: totalPaid,
+                              );
+                            } else {
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("No records to print")));
                               }
                             }
+                          },
+                        ),
+                      ],
+                    ),
 
-                            ReportService.printHistoryReport(
-                              title: "Faculty Statement",
-                              subtitle: "Full History of Lectures and Payment Status",
-                              docs: snapshot.docs,
-                              isAdminReport: false,
-                              totalAmountPaid: totalPaid,
-                            );
-                          } else {
-                            if (context.mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("No records to print")));
-                            }
-                          }
-                        },
-                      ),
-                    ],
-                  ),
+                    const SizedBox(height: 32),
 
-                  const SizedBox(height: 32),
+                    StreamBuilder<DocumentSnapshot>(
+                      stream: FirebaseFirestore.instance.collection('users').doc(user!.uid).snapshots(),
+                      builder: (context, userSnap) {
+                        if (!userSnap.hasData) return const LinearProgressIndicator();
 
-                  // FETCH USER DATA (Rate, Name, Dept)
-                  StreamBuilder<DocumentSnapshot>(
-                    stream: FirebaseFirestore.instance.collection('users').doc(user!.uid).snapshots(),
-                    builder: (context, userSnap) {
-                      if (!userSnap.hasData) return const LinearProgressIndicator();
+                        final userData = userSnap.data!.data() as Map<String, dynamic>;
 
-                      final userData = userSnap.data!.data() as Map<String, dynamic>;
+                        final double hourlyRate = (userData['hourlyRate'] is int)
+                            ? (userData['hourlyRate'] as int).toDouble()
+                            : (userData['hourlyRate'] as double? ?? 0.0);
 
-                      final double hourlyRate = (userData['hourlyRate'] is int)
-                          ? (userData['hourlyRate'] as int).toDouble()
-                          : (userData['hourlyRate'] as double? ?? 0.0);
+                        final String name = userData['name'] ?? 'Faculty Member';
+                        final String dept = userData['department'] ?? 'General';
 
-                      final String name = userData['name'] ?? 'Faculty Member';
-                      final String dept = userData['department'] ?? 'General';
-
-                      return _buildSalaryContent(context, user.uid, hourlyRate, name, dept); // ✅ Pass context
-                    },
-                  ),
-                ],
+                        return _buildSalaryContent(context, user.uid, hourlyRate, name, dept);
+                      },
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
@@ -127,6 +141,8 @@ class FacultySalaryHistoryPage extends StatelessWidget {
   }
 
   Widget _buildSalaryContent(BuildContext context, String uid, double hourlyRate, String name, String dept) {
+    final isDesktop = MediaQuery.of(context).size.width > 800;
+
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance
           .collection('attendance')
@@ -169,28 +185,25 @@ class FacultySalaryHistoryPage extends StatelessWidget {
 
         return Column(
           children: [
-            // 1. SUMMARY CARDS
-            Row(
-              children: [
-                _SummaryCard(
-                  title: "TOTAL EARNED", // ✅ REVERTED TO "TOTAL EARNED"
-                  value: "\₹${totalEarnedYTD.toStringAsFixed(2)}",
-                  icon: Icons.account_balance_wallet,
-                  color: Colors.green,
-                ),
-                const SizedBox(width: 20),
-                _SummaryCard(
-                  title: "PENDING PAYMENT",
-                  value: "\₹${pendingPayment.toStringAsFixed(2)}",
-                  icon: Icons.hourglass_empty,
-                  color: Colors.orange,
-                ),
-              ],
-            ),
+            if (isDesktop)
+              Row(
+                children: [
+                  Expanded(child: _SummaryCard(title: "TOTAL EARNED", value: "\₹${totalEarnedYTD.toStringAsFixed(2)}", icon: Icons.account_balance_wallet, color: Colors.green)),
+                  const SizedBox(width: 20),
+                  Expanded(child: _SummaryCard(title: "PENDING PAYMENT", value: "\₹${pendingPayment.toStringAsFixed(2)}", icon: Icons.hourglass_empty, color: Colors.orange)),
+                ],
+              )
+            else
+              Column(
+                children: [
+                  _SummaryCard(title: "TOTAL EARNED", value: "\₹${totalEarnedYTD.toStringAsFixed(2)}", icon: Icons.account_balance_wallet, color: Colors.green),
+                  const SizedBox(height: 16),
+                  _SummaryCard(title: "PENDING PAYMENT", value: "\₹${pendingPayment.toStringAsFixed(2)}", icon: Icons.hourglass_empty, color: Colors.orange),
+                ],
+              ),
 
             const SizedBox(height: 32),
 
-            // 2. MONTHLY BREAKDOWN LIST
             const Align(
                 alignment: Alignment.centerLeft,
                 child: Text("Monthly Breakdown", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold))
@@ -217,13 +230,12 @@ class FacultySalaryHistoryPage extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(32),
       width: double.infinity,
-      decoration: BoxDecoration(color: theme.cardColor, borderRadius: BorderRadius.circular(12)), // ✅ Dynamic
+      decoration: BoxDecoration(color: theme.cardColor, borderRadius: BorderRadius.circular(12)),
       child: const Center(child: Text("No attendance records found yet.")),
     );
   }
 }
 
-// ================= COMPONENT: MONTHLY ROW =================
 class _MonthlyRow extends StatelessWidget {
   final String month;
   final List<QueryDocumentSnapshot> docs;
@@ -241,11 +253,11 @@ class _MonthlyRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context); // ✅ Theme access
+    final theme = Theme.of(context);
+    final isDesktop = MediaQuery.of(context).size.width > 800;
 
     int totalLectures = 0;
     double totalAmount = 0;
-
     bool hasPending = false;
     bool hasVerified = false;
     bool isAllPaid = true;
@@ -274,78 +286,133 @@ class _MonthlyRow extends StatelessWidget {
       statusColor = Colors.purple;
     }
 
+    Widget leftSide = Row(
+      children: [
+        Container(
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(
+              color: theme.brightness == Brightness.dark ? Colors.grey.shade800 : Colors.grey.shade100,
+              borderRadius: BorderRadius.circular(8)
+          ),
+          child: const Icon(Icons.calendar_month, color: Colors.grey),
+        ),
+        const SizedBox(width: 16),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(month, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16), overflow: TextOverflow.ellipsis),
+              Text("$totalLectures Lectures Recorded", style: const TextStyle(color: Colors.grey, fontSize: 12), overflow: TextOverflow.ellipsis),
+            ],
+          ),
+        ),
+      ],
+    );
+
+    Widget statusPill = Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(color: statusColor.withOpacity(0.1), borderRadius: BorderRadius.circular(20)),
+      child: Text(statusText, style: TextStyle(color: statusColor, fontWeight: FontWeight.bold, fontSize: 12)),
+    );
+
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: theme.cardColor, // ✅ Dynamic Card Color
+        color: theme.cardColor,
         borderRadius: BorderRadius.circular(12),
         boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 5)],
       ),
-      child: Row(
+      child: isDesktop
+          ? Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          // LEFT SIDE: Month & Lectures
+          Expanded(child: leftSide),
           Row(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                    color: theme.brightness == Brightness.dark ? Colors.grey.shade800 : Colors.grey.shade100, // ✅ Dynamic icon bg
-                    borderRadius: BorderRadius.circular(8)
-                ),
-                child: const Icon(Icons.calendar_month, color: Colors.grey),
-              ),
-              const SizedBox(width: 16),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(month, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                  Text("$totalLectures Lectures Recorded", style: const TextStyle(color: Colors.grey, fontSize: 12)),
-                ],
-              ),
-            ],
-          ),
-
-          // RIGHT SIDE: Amount, Status & Print Button
-          Row(
-            children: [
-              // ✅ Removed hardcoded Colors.black87
               Text("\₹${totalAmount.toStringAsFixed(2)}", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
               const SizedBox(width: 24),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                decoration: BoxDecoration(
-                  color: statusColor.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Text(statusText, style: TextStyle(color: statusColor, fontWeight: FontWeight.bold, fontSize: 12)),
-              ),
-
-              // INDIVIDUAL RECEIPT BUTTON
+              statusPill,
               if (isAllPaid) ...[
                 const SizedBox(width: 12),
                 IconButton(
                   icon: const Icon(Icons.download, color: Colors.grey),
                   tooltip: "Download Receipt",
-                  onPressed: () {
-                    ReceiptService.printReceipt(
-                      facultyName: facultyName,
-                      department: department,
-                      month: month,
-                      totalLectures: totalLectures,
-                      ratePerLecture: hourlyRate,
-                      totalAmount: totalAmount,
-                      paymentDate: DateFormat('yyyy-MM-dd').format(DateTime.now()),
-                      receiptId: "SLIP-${month.replaceAll(' ', '-')}",
-                    );
-                  },
+                  onPressed: () => _downloadReceipt(totalLectures, totalAmount),
                 )
               ]
             ],
           )
         ],
+      )
+          : Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Expanded(child: leftSide),
+              statusPill,
+            ],
+          ),
+          const SizedBox(height: 16),
+          Divider(color: Colors.grey.withOpacity(0.2)),
+          const SizedBox(height: 8),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text("Total Earnings:", style: TextStyle(color: Colors.grey)),
+              Row(
+                children: [
+                  Text("\₹${totalAmount.toStringAsFixed(2)}", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                  if (isAllPaid) ...[
+                    const SizedBox(width: 8),
+                    IconButton(
+                      icon: const Icon(Icons.download, color: Colors.grey),
+                      tooltip: "Download Receipt",
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                      onPressed: () => _downloadReceipt(totalLectures, totalAmount),
+                    )
+                  ]
+                ],
+              )
+            ],
+          ),
+        ],
       ),
+    );
+  }
+
+  void _downloadReceipt(int totalLectures, double totalAmount) {
+    List<List<String>> receiptDetails = [];
+
+    for (var doc in docs) {
+      final d = doc.data() as Map<String, dynamic>;
+      DateTime dt = (d['date'] as Timestamp).toDate();
+      int lecs = d['lectures'] as int;
+      double rowTotal = lecs * hourlyRate;
+
+      receiptDetails.add([
+        DateFormat('dd MMM yyyy').format(dt),
+        d['subject'] ?? '-',
+        lecs.toString(),
+        "₹ ${hourlyRate.toStringAsFixed(2)}",
+        "₹ ${rowTotal.toStringAsFixed(2)}"
+      ]);
+    }
+
+    ReceiptService.printReceipt(
+      facultyName: facultyName,
+      department: department,
+      month: month,
+      totalLectures: totalLectures,
+      ratePerLecture: hourlyRate,
+      totalAmount: totalAmount,
+      paymentDate: DateFormat('yyyy-MM-dd').format(DateTime.now()),
+      receiptId: "SLIP-${month.replaceAll(' ', '-')}",
+      lectureDetails: receiptDetails,
     );
   }
 }
@@ -360,31 +427,31 @@ class _SummaryCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context); // ✅ Theme access
+    final theme = Theme.of(context);
 
-    return Expanded(
-      child: Container(
-        padding: const EdgeInsets.all(24),
-        decoration: BoxDecoration(
-          color: theme.cardColor, // ✅ Dynamic Card Color
-          borderRadius: BorderRadius.circular(12),
-          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10)],
-        ),
-        child: Row(
-          children: [
-            CircleAvatar(backgroundColor: color.withOpacity(0.1), child: Icon(icon, color: color)),
-            const SizedBox(width: 16),
-            Column(
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: theme.cardColor,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10)],
+      ),
+      child: Row(
+        children: [
+          CircleAvatar(backgroundColor: color.withOpacity(0.1), child: Icon(icon, color: color)),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(title, style: const TextStyle(color: Colors.grey, fontSize: 12, fontWeight: FontWeight.bold)),
                 const SizedBox(height: 4),
-                // ✅ Removed hardcoded Colors.black87
                 Text(value, style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
               ],
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }

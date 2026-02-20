@@ -9,6 +9,7 @@ class AdminViewAttendancePage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDesktop = MediaQuery.of(context).size.width > 800;
+    final theme = Theme.of(context); // Get theme for refresh spinner
 
     return Scaffold(
       appBar: isDesktop
@@ -26,24 +27,33 @@ class AdminViewAttendancePage extends StatelessWidget {
         children: [
           if (isDesktop) const AdminSidebar(activeRoute: '/admin/view-attendance'),
 
-          // MAIN CONTENT
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 if (isDesktop) _TopHeader(),
                 Expanded(
-                  child: SingleChildScrollView(
-                    padding: EdgeInsets.all(isDesktop ? 32 : 16),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: const [
-                        Text("Attendance Verification", style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
-                        SizedBox(height: 24),
+                  // ✅ REFRESH WRAPPER APPLIED HERE
+                  child: RefreshIndicator(
+                    color: theme.primaryColor,
+                    backgroundColor: theme.cardColor,
+                    onRefresh: () async {
+                      await Future.delayed(const Duration(milliseconds: 1200));
+                    },
+                    child: SingleChildScrollView(
+                      // ✅ ALWAYS SCROLLABLE
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      padding: EdgeInsets.all(isDesktop ? 32 : 16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: const [
+                          Text("Attendance Verification", style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
+                          SizedBox(height: 24),
 
-                        // FULL SCREEN TABLE
-                        ExpandedAttendanceTable(),
-                      ],
+                          // FULL SCREEN TABLE
+                          ExpandedAttendanceTable(),
+                        ],
+                      ),
                     ),
                   ),
                 ),
@@ -129,12 +139,10 @@ class ExpandedAttendanceTable extends StatelessWidget {
                                   return const Text("Loading...", style: TextStyle(color: Colors.grey));
                                 }
 
-                                // ✅ THE CRASH FIX IS HERE: Check if the user document actually exists!
                                 if (!userSnap.hasData || !userSnap.data!.exists) {
                                   return const Text("Deleted Faculty", style: TextStyle(color: Colors.red, fontStyle: FontStyle.italic));
                                 }
 
-                                // If it exists, grab the data safely
                                 final userData = userSnap.data!.data() as Map<String, dynamic>?;
                                 return Text(userData?['name'] ?? 'Unknown', style: const TextStyle(fontWeight: FontWeight.bold));
                               },
