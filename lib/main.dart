@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
+
 import 'pages/login_page.dart';
 import 'pages/admin/admin_dashboard.dart';
 import 'pages/admin/add_faculty.dart';
@@ -14,8 +15,8 @@ import 'pages/faculty/faculty_salary_summary_page.dart';
 import 'pages/admin/admin_reports_page.dart';
 import 'pages/faculty/faculty_profile_page.dart';
 
-// ✅ Global Variable for Dark Mode
-final ValueNotifier<ThemeMode> themeNotifier = ValueNotifier(ThemeMode.light);
+// ✅ Global Variable for Dark Mode (The Sidebar talks to this!)
+final ValueNotifier<ThemeMode> themeNotifier = ValueNotifier(ThemeMode.system);
 
 // Removes the "Flashing/Loading" animation between pages
 class NoAnimationPageTransitionsBuilder extends PageTransitionsBuilder {
@@ -41,6 +42,7 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // ✅ Wraps the app to listen for Dark Mode changes from the Sidebar
     return ValueListenableBuilder<ThemeMode>(
       valueListenable: themeNotifier,
       builder: (_, ThemeMode currentMode, __) {
@@ -58,7 +60,6 @@ class MyApp extends StatelessWidget {
             appBarTheme: const AppBarTheme(backgroundColor: Color(0xff45a182), foregroundColor: Colors.white),
             useMaterial3: false,
             pageTransitionsTheme: const PageTransitionsTheme(
-              // ✅ FIX: Applied the No-Animation rule to ALL platforms including Web/Desktop!
               builders: {
                 TargetPlatform.android: NoAnimationPageTransitionsBuilder(),
                 TargetPlatform.iOS: NoAnimationPageTransitionsBuilder(),
@@ -78,7 +79,6 @@ class MyApp extends StatelessWidget {
             appBarTheme: const AppBarTheme(backgroundColor: Color(0xff121212), foregroundColor: Colors.white),
             useMaterial3: false,
             pageTransitionsTheme: const PageTransitionsTheme(
-              // ✅ FIX: Applied to Dark Mode too!
               builders: {
                 TargetPlatform.android: NoAnimationPageTransitionsBuilder(),
                 TargetPlatform.iOS: NoAnimationPageTransitionsBuilder(),

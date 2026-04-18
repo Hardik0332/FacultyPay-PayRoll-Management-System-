@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:google_sign_in/google_sign_in.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -15,7 +17,6 @@ class _LoginPageState extends State<LoginPage> {
 
   @override
   Widget build(BuildContext context) {
-    // Grab the current theme (Light or Deep AMOLED Black)
     final theme = Theme.of(context);
 
     return Scaffold(
@@ -23,12 +24,12 @@ class _LoginPageState extends State<LoginPage> {
       body: Center(
         child: SingleChildScrollView(
           child: Container(
-            width: 450, // Nice wide login box
+            width: 450,
             padding: const EdgeInsets.all(40),
             decoration: BoxDecoration(
-              color: theme.cardColor, // White or Deep Grey
+              color: theme.cardColor,
               borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: theme.dividerColor.withOpacity(0.1)),
+              border: Border.all(color: theme.dividerColor.withValues(alpha: 0.1)),
               boxShadow: const [
                 BoxShadow(color: Colors.black26, blurRadius: 20, offset: Offset(0, 10))
               ],
@@ -66,9 +67,9 @@ class _LoginPageState extends State<LoginPage> {
                     border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                   ),
                 ),
-                const SizedBox(height: 40),
+                const SizedBox(height: 30),
 
-                // LOGIN BUTTON
+                // STANDARD LOGIN BUTTON
                 SizedBox(
                   width: double.infinity,
                   height: 55,
@@ -77,7 +78,7 @@ class _LoginPageState extends State<LoginPage> {
                       backgroundColor: theme.primaryColor,
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                     ),
-                    onPressed: isLoading ? null : _handleLogin,
+                    onPressed: isLoading ? null : _handleEmailLogin,
                     child: isLoading
                         ? const SizedBox(
                         height: 24,
@@ -87,6 +88,41 @@ class _LoginPageState extends State<LoginPage> {
                         : const Text("Login", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white)),
                   ),
                 ),
+
+                const SizedBox(height: 30),
+
+                // DIVIDER (Updated to match the video)
+                Row(
+                  children: [
+                    Expanded(child: Divider(color: theme.dividerColor.withValues(alpha: 0.2))),
+                    const Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 16),
+                      child: Text("OR", style: TextStyle(color: Colors.grey, fontSize: 12, fontWeight: FontWeight.bold)),
+                    ),
+                    Expanded(child: Divider(color: theme.dividerColor.withValues(alpha: 0.2))),
+                  ],
+                ),
+
+                const SizedBox(height: 30),
+
+                // FULL-WIDTH SSO BUTTONS
+                _buildFullWidthSocialButton(
+                  context: context,
+                  text: "Continue with Google",
+                  // ✅ Changed to local asset path
+                  assetPath: "assets/images/google_logo.png",
+                  onPressed: isLoading ? null : _signInWithGoogle,
+                ),
+
+                const SizedBox(height: 16),
+
+                _buildFullWidthSocialButton(
+                  context: context,
+                  text: "Continue with Microsoft",
+                  // ✅ Changed to local asset path
+                  assetPath: "assets/images/microsoft_logo.png",
+                  onPressed: isLoading ? null : _signInWithMicrosoft,
+                ),
               ],
             ),
           ),
@@ -95,48 +131,148 @@ class _LoginPageState extends State<LoginPage> {
     );
   }
 
-  Future<void> _handleLogin() async {
+  // --- NEW FULL-WIDTH HELPER WIDGET ---
+  // ✅ Changed 'iconUrl' to 'assetPath'
+  Widget _buildFullWidthSocialButton({required BuildContext context, required String text, required String assetPath, required VoidCallback? onPressed}) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    return SizedBox(
+      width: double.infinity,
+      height: 55,
+      child: OutlinedButton(
+        style: OutlinedButton.styleFrom(
+          backgroundColor: isDark ? Colors.grey.shade900 : Colors.white,
+          side: BorderSide(color: theme.dividerColor.withValues(alpha: 0.2)),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        ),
+        onPressed: onPressed,
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            // ✅ Changed Image.network to Image.asset
+            Image.asset(
+              assetPath,
+              height: 22,
+              width: 22,
+              errorBuilder: (context, error, stackTrace) => const Icon(Icons.language, size: 22, color: Colors.grey),
+            ),
+            const SizedBox(width: 12),
+            Text(
+                text,
+                style: TextStyle(
+                    color: isDark ? Colors.white : Colors.black87,
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold
+                )
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // --- AUTHENTICATION LOGIC ---
+
+  Future<void> _handleEmailLogin() async {
     final email = emailController.text.trim();
     final password = passwordController.text.trim();
 
     if (email.isEmpty || password.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Please enter both email and password")),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Please enter both email and password")));
       return;
     }
 
     setState(() => isLoading = true);
     try {
-      // Just sign in. The AuthGate in main.dart will detect the auth state change 
-      // and redirect the user automatically based on their Firestore role.
-      await FirebaseAuth.instance.signInWithEmailAndPassword(
-        email: email,
-        password: password,
-      );
-      // No need to navigate here, AuthGate handles it.
+      await FirebaseAuth.instance.signInWithEmailAndPassword(email: email, password: password);
     } on FirebaseAuthException catch (e) {
-      if (mounted) {
-        String message = "Login Failed";
-        if (e.code == 'user-not-found') {
-          message = "No user found for that email.";
-        } else if (e.code == 'wrong-password') {
-          message = "Wrong password provided.";
-        } else {
-          message = e.message ?? message;
-        }
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(message)),
+      if (mounted) setState(() => isLoading = false);
+      _showError(e.code);
+    } catch (e) {
+      if (mounted) setState(() => isLoading = false);
+      _showError(e.toString());
+    }
+  }
+
+  // ✅ THE ULTIMATE BYPASS FIX (Preserved!)
+  // ✅ THE ULTIMATE BYPASS FIX (V7 SYNTAX)
+  Future<void> _signInWithGoogle() async {
+    setState(() => isLoading = true);
+    try {
+      if (kIsWeb) {
+        final provider = GoogleAuthProvider();
+        await FirebaseAuth.instance.signInWithPopup(provider);
+      } else {
+
+        // 1. HARDCODE WEB CLIENT ID USING V7 INITIALIZE
+        await GoogleSignIn.instance.initialize(
+          serverClientId: '1078975084440-pi5isfm1t6rtm0jo1n0spaf4qe0801oo.apps.googleusercontent.com',
         );
+
+        // 2. V7 USES .authenticate() INSTEAD OF .signIn()
+        final GoogleSignInAccount? gUser = await GoogleSignIn.instance.authenticate();
+
+        if (gUser == null) {
+          if (mounted) setState(() => isLoading = false);
+          _showError("popup-closed-by-user");
+          return;
+        }
+
+        // 3. V7 AUTHENTICATION IS SYNCHRONOUS (No 'await' allowed here!)
+        final GoogleSignInAuthentication gAuth = gUser.authentication;
+
+        // 4. V7 REMOVED accessToken, FIREBASE ONLY NEEDS idToken
+        final credential = GoogleAuthProvider.credential(
+          idToken: gAuth.idToken,
+        );
+
+        await FirebaseAuth.instance.signInWithCredential(credential);
       }
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("An unexpected error occurred: ${e.toString()}")),
-        );
-      }
-    } finally {
       if (mounted) setState(() => isLoading = false);
+
+      if (e is FirebaseAuthException) {
+        _showError(e.code);
+      } else {
+        _showError("popup-closed-by-user");
+      }
     }
+  }
+
+  Future<void> _signInWithMicrosoft() async {
+    setState(() => isLoading = true);
+    try {
+      final provider = OAuthProvider('microsoft.com');
+      provider.setCustomParameters({'prompt': 'select_account'});
+
+      if (kIsWeb) {
+        await FirebaseAuth.instance.signInWithPopup(provider);
+      } else {
+        await FirebaseAuth.instance.signInWithProvider(provider);
+      }
+    } catch (e) {
+      if (mounted) setState(() => isLoading = false);
+
+      if (e is FirebaseAuthException) {
+        _showError(e.code);
+      } else {
+        _showError("popup-closed-by-user");
+      }
+    }
+  }
+
+  void _showError(String code) {
+    if (!mounted) return;
+
+    setState(() => isLoading = false);
+
+    String message = "Login Failed: $code";
+
+    if (code.contains('user-not-found')) message = "No user found for that email.";
+    if (code.contains('wrong-password')) message = "Wrong password provided.";
+    if (code.contains('popup-closed-by-user') || code.contains('cancelled')) message = "Sign-in was cancelled.";
+
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
   }
 }
