@@ -47,6 +47,8 @@ class _LoginPageState extends State<LoginPage> {
                 // EMAIL FIELD
                 TextField(
                   controller: emailController,
+                  // ✅ Jumps to the password field when you press Enter
+                  textInputAction: TextInputAction.next,
                   style: TextStyle(color: theme.textTheme.bodyLarge?.color),
                   decoration: InputDecoration(
                     labelText: "Email",
@@ -60,6 +62,14 @@ class _LoginPageState extends State<LoginPage> {
                 TextField(
                   controller: passwordController,
                   obscureText: true,
+                  // ✅ Tells the keyboard this is the final input
+                  textInputAction: TextInputAction.done,
+                  // ✅ Automatically runs the login function when Enter is pressed
+                  onSubmitted: (_) {
+                    if (!isLoading) {
+                      _handleEmailLogin();
+                    }
+                  },
                   style: TextStyle(color: theme.textTheme.bodyLarge?.color),
                   decoration: InputDecoration(
                     labelText: "Password",
@@ -67,7 +77,24 @@ class _LoginPageState extends State<LoginPage> {
                     border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                   ),
                 ),
-                const SizedBox(height: 30),
+
+                // FORGOT PASSWORD BUTTON
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton(
+                    onPressed: _showForgotPasswordDialog,
+                    style: TextButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+                      minimumSize: Size.zero,
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                    child: Text(
+                      "Forgot Password?",
+                      style: TextStyle(color: theme.primaryColor, fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 20),
 
                 // STANDARD LOGIN BUTTON
                 SizedBox(
@@ -91,7 +118,7 @@ class _LoginPageState extends State<LoginPage> {
 
                 const SizedBox(height: 30),
 
-                // DIVIDER (Updated to match the video)
+                // DIVIDER
                 Row(
                   children: [
                     Expanded(child: Divider(color: theme.dividerColor.withValues(alpha: 0.2))),
@@ -109,8 +136,7 @@ class _LoginPageState extends State<LoginPage> {
                 _buildFullWidthSocialButton(
                   context: context,
                   text: "Continue with Google",
-                  // ✅ Changed to local asset path
-                  assetPath: "assets/images/google_logo.png",
+                  assetPath: "assets/images/google.png",
                   onPressed: isLoading ? null : _signInWithGoogle,
                 ),
 
@@ -119,8 +145,7 @@ class _LoginPageState extends State<LoginPage> {
                 _buildFullWidthSocialButton(
                   context: context,
                   text: "Continue with Microsoft",
-                  // ✅ Changed to local asset path
-                  assetPath: "assets/images/microsoft_logo.png",
+                  assetPath: "assets/images/microsoft.png",
                   onPressed: isLoading ? null : _signInWithMicrosoft,
                 ),
               ],
@@ -131,8 +156,7 @@ class _LoginPageState extends State<LoginPage> {
     );
   }
 
-  // --- NEW FULL-WIDTH HELPER WIDGET ---
-  // ✅ Changed 'iconUrl' to 'assetPath'
+  // --- FULL-WIDTH HELPER WIDGET ---
   Widget _buildFullWidthSocialButton({required BuildContext context, required String text, required String assetPath, required VoidCallback? onPressed}) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
@@ -150,7 +174,6 @@ class _LoginPageState extends State<LoginPage> {
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            // ✅ Changed Image.network to Image.asset
             Image.asset(
               assetPath,
               height: 22,
@@ -195,8 +218,85 @@ class _LoginPageState extends State<LoginPage> {
     }
   }
 
-  // ✅ THE ULTIMATE BYPASS FIX (Preserved!)
-  // ✅ THE ULTIMATE BYPASS FIX (V7 SYNTAX)
+  // FORGOT PASSWORD LOGIC
+  void _showForgotPasswordDialog() {
+    final TextEditingController resetEmailController = TextEditingController(text: emailController.text.trim());
+    final theme = Theme.of(context);
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          backgroundColor: theme.cardColor,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: const Text("Reset Password", style: TextStyle(fontWeight: FontWeight.bold)),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                "Enter your email address and we will send you a secure link to reset your password.",
+                style: TextStyle(color: theme.textTheme.bodyMedium?.color?.withValues(alpha: 0.8)),
+              ),
+              const SizedBox(height: 20),
+              TextField(
+                controller: resetEmailController,
+                decoration: InputDecoration(
+                  labelText: "Email",
+                  prefixIcon: const Icon(Icons.email_outlined),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text("Cancel", style: TextStyle(color: Colors.grey)),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: theme.primaryColor,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              ),
+              onPressed: () async {
+                final email = resetEmailController.text.trim();
+                if (email.isEmpty) return;
+
+                Navigator.pop(context);
+
+                try {
+                  await FirebaseAuth.instance.sendPasswordResetEmail(email: email);
+
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text("Reset link sent! Please check your email inbox.", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                        backgroundColor: Colors.green,
+                        behavior: SnackBarBehavior.floating,
+                      ),
+                    );
+                  }
+                } on FirebaseAuthException catch (e) {
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(_getFriendlyErrorMessage(e.code)),
+                        backgroundColor: Colors.redAccent,
+                        behavior: SnackBarBehavior.floating,
+                      ),
+                    );
+                  }
+                }
+              },
+              child: const Text("Send Link", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  // V7 GOOGLE SIGN-IN
   Future<void> _signInWithGoogle() async {
     setState(() => isLoading = true);
     try {
@@ -204,13 +304,10 @@ class _LoginPageState extends State<LoginPage> {
         final provider = GoogleAuthProvider();
         await FirebaseAuth.instance.signInWithPopup(provider);
       } else {
-
-        // 1. HARDCODE WEB CLIENT ID USING V7 INITIALIZE
         await GoogleSignIn.instance.initialize(
           serverClientId: '1078975084440-pi5isfm1t6rtm0jo1n0spaf4qe0801oo.apps.googleusercontent.com',
         );
 
-        // 2. V7 USES .authenticate() INSTEAD OF .signIn()
         final GoogleSignInAccount? gUser = await GoogleSignIn.instance.authenticate();
 
         if (gUser == null) {
@@ -219,13 +316,8 @@ class _LoginPageState extends State<LoginPage> {
           return;
         }
 
-        // 3. V7 AUTHENTICATION IS SYNCHRONOUS (No 'await' allowed here!)
         final GoogleSignInAuthentication gAuth = gUser.authentication;
-
-        // 4. V7 REMOVED accessToken, FIREBASE ONLY NEEDS idToken
-        final credential = GoogleAuthProvider.credential(
-          idToken: gAuth.idToken,
-        );
+        final credential = GoogleAuthProvider.credential(idToken: gAuth.idToken);
 
         await FirebaseAuth.instance.signInWithCredential(credential);
       }
@@ -264,15 +356,18 @@ class _LoginPageState extends State<LoginPage> {
 
   void _showError(String code) {
     if (!mounted) return;
-
     setState(() => isLoading = false);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(_getFriendlyErrorMessage(code))),
+    );
+  }
 
-    String message = "Login Failed: $code";
-
-    if (code.contains('user-not-found')) message = "No user found for that email.";
-    if (code.contains('wrong-password')) message = "Wrong password provided.";
-    if (code.contains('popup-closed-by-user') || code.contains('cancelled')) message = "Sign-in was cancelled.";
-
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+  String _getFriendlyErrorMessage(String code) {
+    if (code.contains('user-not-found')) return "No account found for that email address.";
+    if (code.contains('wrong-password')) return "Incorrect password. Please try again.";
+    if (code.contains('invalid-email')) return "Please enter a valid email address.";
+    if (code.contains('popup-closed-by-user') || code.contains('cancelled')) return "Sign-in was cancelled.";
+    if (code.contains('too-many-requests')) return "Too many failed attempts. Please try resetting your password.";
+    return "Authentication Failed: $code";
   }
 }
