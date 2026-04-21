@@ -47,6 +47,9 @@ class AdminSidebar extends StatelessWidget {
           _buildNavItem(context, Icons.calculate, "Calculate Salary", '/admin/calculate-salary'),
           _buildNavItem(context, Icons.analytics, "Reports", '/admin/reports'),
 
+          // ✅ NEW: Admin Profile Button Added Here
+          _buildNavItem(context, Icons.person, "My Profile", '/admin/profile'),
+
           const Spacer(),
           const Divider(),
 

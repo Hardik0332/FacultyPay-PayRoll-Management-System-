@@ -23,20 +23,11 @@ class DefaultFirebaseOptions {
       case TargetPlatform.android:
         return android;
       case TargetPlatform.iOS:
-        throw UnsupportedError(
-          'DefaultFirebaseOptions have not been configured for ios - '
-          'you can reconfigure this by running the FlutterFire CLI again.',
-        );
+        return ios;
       case TargetPlatform.macOS:
-        throw UnsupportedError(
-          'DefaultFirebaseOptions have not been configured for macos - '
-          'you can reconfigure this by running the FlutterFire CLI again.',
-        );
+        return macos;
       case TargetPlatform.windows:
-        throw UnsupportedError(
-          'DefaultFirebaseOptions have not been configured for windows - '
-          'you can reconfigure this by running the FlutterFire CLI again.',
-        );
+        return windows;
       case TargetPlatform.linux:
         throw UnsupportedError(
           'DefaultFirebaseOptions have not been configured for linux - '
@@ -65,4 +56,36 @@ class DefaultFirebaseOptions {
     projectId: 'fixed-project-new',
     storageBucket: 'fixed-project-new.firebasestorage.app',
   );
+
+  static const FirebaseOptions macos = FirebaseOptions(
+    apiKey: 'AIzaSyCINvk0atIRf7W0UXjJqdMmN_IEbp71spc',
+    appId: '1:1078975084440:ios:cdd4e84327bd64eb0c5ded',
+    messagingSenderId: '1078975084440',
+    projectId: 'fixed-project-new',
+    storageBucket: 'fixed-project-new.firebasestorage.app',
+    androidClientId: '1078975084440-me24jdse5ad3ukkl7ug42tcbetojfppe.apps.googleusercontent.com',
+    iosClientId: '1078975084440-3mnlmc3sfq52d91k1c8jn39i2nmk4n32.apps.googleusercontent.com',
+    iosBundleId: 'com.example.fixedProject',
+  );
+
+  static const FirebaseOptions ios = FirebaseOptions(
+    apiKey: 'AIzaSyCINvk0atIRf7W0UXjJqdMmN_IEbp71spc',
+    appId: '1:1078975084440:ios:cdd4e84327bd64eb0c5ded',
+    messagingSenderId: '1078975084440',
+    projectId: 'fixed-project-new',
+    storageBucket: 'fixed-project-new.firebasestorage.app',
+    androidClientId: '1078975084440-me24jdse5ad3ukkl7ug42tcbetojfppe.apps.googleusercontent.com',
+    iosClientId: '1078975084440-3mnlmc3sfq52d91k1c8jn39i2nmk4n32.apps.googleusercontent.com',
+    iosBundleId: 'com.example.fixedProject',
+  );
+
+  static const FirebaseOptions windows = FirebaseOptions(
+    apiKey: 'AIzaSyCyrjX6tkntmY6F6x-FSicxSEQBCP6wvug',
+    appId: '1:1078975084440:web:9af2ad47379308250c5ded',
+    messagingSenderId: '1078975084440',
+    projectId: 'fixed-project-new',
+    authDomain: 'fixed-project-new.firebaseapp.com',
+    storageBucket: 'fixed-project-new.firebasestorage.app',
+  );
+
 }

@@ -1,49 +1,42 @@
 {
   "project_info": {
-    "project_number": "1078975084440",
-    "project_id": "fixed-project-new",
-    "storage_bucket": "fixed-project-new.firebasestorage.app"
+    "project_number": "1085093252774",
+    "project_id": "facultypay",
+    "storage_bucket": "facultypay.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:1078975084440:android:e4ce0e10c883a2a80c5ded",
+        "mobilesdk_app_id": "1:1085093252774:android:bb969fbc93bcc7ba7e2e67",
         "android_client_info": {
-          "package_name": "com.college.payroll"
+          "package_name": "com.example.fixed_project"
         }
       },
       "oauth_client": [
         {
-          "client_id": "1078975084440-me24jdse5ad3ukkl7ug42tcbetojfppe.apps.googleusercontent.com",
+          "client_id": "1085093252774-nitvptcsla67ebibet6f5b8dfgpkis2f.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {
-            "package_name": "com.college.payroll",
+            "package_name": "com.example.fixed_project",
             "certificate_hash": "e4372b2ef5a0363eae31bc90287e83ed61a9eddb"
           }
         },
         {
-          "client_id": "1078975084440-pi5isfm1t6rtm0jo1n0spaf4qe0801oo.apps.googleusercontent.com",
+          "client_id": "1085093252774-4ee6ucv8alpslq5jvklba1pokdi2m68c.apps.googleusercontent.com",
           "client_type": 3
         }
       ],
       "api_key": [
         {
-          "current_key": "AIzaSyAIUWzJ-KvXzF3ZpvZgDJfgkCNrsqtYcPg"
+          "current_key": "AIzaSyBycG2CXCfYuLz68dXhAG5NKtZGIu0sGQo"
         }
       ],
       "services": {
         "appinvite_service": {
           "other_platform_oauth_client": [
             {
-              "client_id": "1078975084440-pi5isfm1t6rtm0jo1n0spaf4qe0801oo.apps.googleusercontent.com",
+              "client_id": "1085093252774-4ee6ucv8alpslq5jvklba1pokdi2m68c.apps.googleusercontent.com",
               "client_type": 3
-            },
-            {
-              "client_id": "1078975084440-3mnlmc3sfq52d91k1c8jn39i2nmk4n32.apps.googleusercontent.com",
-              "client_type": 2,
-              "ios_info": {
-                "bundle_id": "com.example.fixedProject"
-              }
             }
           ]
         }

@@ -305,7 +305,7 @@ class _LoginPageState extends State<LoginPage> {
         await FirebaseAuth.instance.signInWithPopup(provider);
       } else {
         await GoogleSignIn.instance.initialize(
-          serverClientId: '1078975084440-pi5isfm1t6rtm0jo1n0spaf4qe0801oo.apps.googleusercontent.com',
+          serverClientId: '1085093252774-4ee6ucv8alpslq5jvklba1pokdi2m68c.apps.googleusercontent.com',
         );
 
         final GoogleSignInAccount? gUser = await GoogleSignIn.instance.authenticate();

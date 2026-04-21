@@ -8,12 +8,15 @@ import 'pages/admin/add_faculty.dart';
 import 'pages/admin/view_faculty_page.dart';
 import 'pages/admin/admin_view_attendance_page.dart';
 import 'pages/admin/calculate_salary_screen.dart';
+import 'pages/admin/admin_reports_page.dart';
+import 'pages/admin/admin_profile_page.dart'; // ✅ NEW: Admin Profile Import
+
 import 'pages/faculty/faculty_dashboard.dart';
 import 'pages/faculty/add_attendance_page.dart';
-import 'services/auth_gate.dart';
 import 'pages/faculty/faculty_salary_summary_page.dart';
-import 'pages/admin/admin_reports_page.dart';
 import 'pages/faculty/faculty_profile_page.dart';
+
+import 'services/auth_gate.dart';
 
 // ✅ Global Variable for Dark Mode (The Sidebar talks to this!)
 final ValueNotifier<ThemeMode> themeNotifier = ValueNotifier(ThemeMode.system);
@@ -91,15 +94,19 @@ class MyApp extends StatelessWidget {
 
           home: const AuthGate(),
           routes: {
+            // --- ADMIN ROUTES ---
             '/admin/dashboard': (context) => const AdminDashboard(),
             '/admin/add-faculty': (context) => const AddFacultyPage(),
             '/admin/view-faculty': (context) => const ViewFacultyPage(),
             '/admin/view-attendance': (context) => const AdminViewAttendancePage(),
             '/admin/calculate-salary': (context) => const CalculateSalaryScreen(),
-            '/faculty/salary-history': (context) => const FacultySalaryHistoryPage(),
+            '/admin/reports': (context) => const AdminReportsPage(),
+            '/admin/profile': (context) => const AdminProfilePage(), // ✅ NEW: Admin Route
+
+            // --- FACULTY ROUTES ---
             '/faculty/dashboard': (context) => const FacultyDashboard(),
             '/faculty/add-attendance': (context) => const FacultyAddAttendancePage(),
-            '/admin/reports': (context) => const AdminReportsPage(),
+            '/faculty/salary-history': (context) => const FacultySalaryHistoryPage(),
             '/faculty/profile': (context) => const FacultyProfilePage(),
           },
         );
