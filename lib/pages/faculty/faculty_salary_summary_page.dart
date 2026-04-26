@@ -1,457 +1,561 @@
+import 'dart:ui';
+import 'dart:convert'; // Added to decode the base64 image
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart';
-import '../../widgets/app_sidebars.dart';
+import 'notifications_page.dart';
+
+// Make sure you have these imports pointing to your actual service files!
 import '../../services/report_service.dart';
 import '../../services/receipt_service.dart';
 
-class FacultySalaryHistoryPage extends StatelessWidget {
+class FacultySalaryHistoryPage extends StatefulWidget {
   const FacultySalaryHistoryPage({super.key});
 
   @override
+  State<FacultySalaryHistoryPage> createState() => _FacultySalaryHistoryPageState();
+}
+
+class _FacultySalaryHistoryPageState extends State<FacultySalaryHistoryPage> {
+  final Color primaryRed = const Color(0xFFE05B5C);
+  final Color successGreen = const Color(0xFF4ADE80);
+  final Color pendingOrange = const Color(0xFFFBBF24);
+  final Color processingBlue = const Color(0xFF60A5FA);
+
+  int _currentTabIndex = 0; // 0: All, 1: Completed, 2: Pending
+  int _currentNavIndex = 2; // "PAY" tab
+
+  final User? currentUser = FirebaseAuth.instance.currentUser;
+
+  @override
   Widget build(BuildContext context) {
-    final user = FirebaseAuth.instance.currentUser;
-    final isDesktop = MediaQuery.of(context).size.width > 800;
-    final theme = Theme.of(context);
+    if (currentUser == null) return const Scaffold(body: Center(child: Text("Not logged in")));
 
     return Scaffold(
-      appBar: isDesktop
-          ? null
-          : AppBar(title: const Text("Salary History"), elevation: 0),
-      drawer: isDesktop
-          ? null
-          : const Drawer(child: FacultySidebar(activeRoute: '/faculty/salary-history')),
-
-      body: Row(
+      backgroundColor: const Color(0xFF282C37),
+      body: Stack(
         children: [
-          if (isDesktop)
-            const FacultySidebar(activeRoute: '/faculty/salary-history'),
+          // 1. Background Gradient
+          Container(
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [Color(0xFF3B4154), Color(0xFF1E212A)],
+              ),
+            ),
+          ),
 
-          Expanded(
-            // ✅ 1. ADDED PULL-TO-REFRESH
-            child: RefreshIndicator(
-              color: theme.primaryColor,
-              backgroundColor: theme.cardColor,
-              onRefresh: () async {
-                await Future.delayed(const Duration(milliseconds: 1200));
+          // 2. FIREBASE DATA STREAM
+          StreamBuilder<DocumentSnapshot>(
+            stream: FirebaseFirestore.instance.collection('users').doc(currentUser!.uid).snapshots(),
+            builder: (context, userSnap) {
+              if (!userSnap.hasData) return const Center(child: CircularProgressIndicator());
+
+              final userData = userSnap.data!.data() as Map<String, dynamic>? ?? {};
+              final double hourlyRate = (userData['hourlyRate'] is int)
+                  ? (userData['hourlyRate'] as int).toDouble()
+                  : (userData['hourlyRate'] as double? ?? 0.0);
+              final String name = userData['name'] ?? 'Faculty Member';
+              final String dept = userData['department'] ?? 'General';
+
+              // FETCH AVATAR FROM FIREBASE
+              final String? avatarBase64 = userData['avatarBase64'];
+
+              return StreamBuilder<QuerySnapshot>(
+                stream: FirebaseFirestore.instance
+                    .collection('attendance')
+                    .where('uid', isEqualTo: currentUser!.uid)
+                    .orderBy('date', descending: true)
+                    .snapshots(),
+                builder: (context, attendanceSnap) {
+                  if (attendanceSnap.connectionState == ConnectionState.waiting && !attendanceSnap.hasData) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
+
+                  final docs = attendanceSnap.data?.docs ?? [];
+
+                  // --- CALCULATIONS ---
+                  double totalEarnedYTD = 0;
+                  double pendingPayment = 0;
+                  Map<String, List<QueryDocumentSnapshot>> groupedData = {};
+
+                  for (var doc in docs) {
+                    final data = doc.data() as Map<String, dynamic>;
+                    int lectures = data['lectures'] ?? 0;
+                    String status = data['status'] ?? 'Pending';
+                    Timestamp ts = data['date'];
+                    String monthKey = DateFormat('MMMM yyyy').format(ts.toDate());
+
+                    // Group by Month
+                    if (!groupedData.containsKey(monthKey)) groupedData[monthKey] = [];
+                    groupedData[monthKey]!.add(doc);
+
+                    // Totals
+                    if (status == 'Paid') {
+                      totalEarnedYTD += (lectures * hourlyRate);
+                    } else if (status == 'Verified' || status == 'Pending') {
+                      pendingPayment += (lectures * hourlyRate);
+                    }
+                  }
+
+                  return Stack(
+                    children: [
+                      SafeArea(
+                        bottom: false,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
+                              // PASS AVATAR TO HEADER
+                              child: _buildHeader(name, dept, hourlyRate, docs, avatarBase64),
+                            ),
+                            Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 20),
+                              child: _buildMasterCard(totalEarnedYTD, pendingPayment),
+                            ),
+                          ],
+                        ),
+                      ),
+
+                      // 3. THE DRAGGABLE BOTTOM SHEET (Monthly History)
+                      DraggableScrollableSheet(
+                        initialChildSize: 0.58,
+                        minChildSize: 0.58,
+                        maxChildSize: 0.88,
+                        builder: (BuildContext context, ScrollController scrollController) {
+                          return Container(
+                            margin: const EdgeInsets.only(top: 24),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF242832),
+                              borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
+                              boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.3), blurRadius: 20, offset: const Offset(0, -5))],
+                            ),
+                            child: ListView(
+                              controller: scrollController, // This makes the ENTIRE sheet draggable
+                              padding: const EdgeInsets.only(bottom: 120), // Padding for the floating nav bar
+                              physics: const ClampingScrollPhysics(), // Keeps the drag smooth
+                              children: [
+                                // Drag Handle (Visual)
+                                Center(
+                                  child: Container(
+                                    width: 40, height: 4,
+                                    margin: const EdgeInsets.only(top: 16, bottom: 20),
+                                    decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(2)),
+                                  ),
+                                ),
+
+                                // Segmented Tabs
+                                Padding(
+                                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                                  child: _buildSegmentedTabs(),
+                                ),
+                                const SizedBox(height: 24),
+
+                                // History List
+                                Padding(
+                                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                                  child: Stack(
+                                    children: [
+                                      Positioned(left: 35, top: 30, bottom: 30, child: Container(width: 1.5, color: primaryRed.withValues(alpha: 0.4))),
+                                      Column(
+                                        children: _buildMonthlyList(groupedData, hourlyRate, name, dept),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        },
+                      ),
+                    ],
+                  );
+                },
+              );
+            },
+          ),
+
+          // Floating Bottom Navigation
+          Positioned(
+            bottom: 30, left: 20, right: 20,
+            child: _buildFloatingBottomNav(),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // --- HEADER (WITH PRINT SERVICE) ---
+  Widget _buildHeader(String name, String dept, double hourlyRate, List<QueryDocumentSnapshot> docs, String? avatarBase64) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Expanded(child: Text("FacultyPay", style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold, color: Colors.white, letterSpacing: -0.5), overflow: TextOverflow.ellipsis)),
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            GestureDetector(
+              onTap: () {
+                if (docs.isEmpty) {
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("No records to print")));
+                  return;
+                }
+                double totalPaid = 0.0;
+                for (var doc in docs) {
+                  if (doc['status'] == 'Paid') totalPaid += (doc['lectures'] as int) * hourlyRate;
+                }
+                ReportService.printHistoryReport(
+                  title: "Faculty Statement",
+                  subtitle: "Full History of Lectures and Payment Status",
+                  docs: docs,
+                  isAdminReport: false,
+                  singleFacultyName: name,
+                  singleFacultyDept: dept,
+                  singleFacultyRate: hourlyRate,
+                  totalAmountPaid: totalPaid,
+                );
               },
-              child: SingleChildScrollView(
-                // ✅ 2. ALWAYS SCROLLABLE SO YOU CAN DRAG EVEN IF NOT FULL
-                physics: const AlwaysScrollableScrollPhysics(),
-                padding: EdgeInsets.all(isDesktop ? 32 : 16),
+              child: Container(padding: const EdgeInsets.all(8), decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.15), shape: BoxShape.circle), child: const Icon(Icons.print, color: Colors.white, size: 20)),
+            ),
+            const SizedBox(width: 12),
+            // ---> CLICKABLE NOTIFICATION BUTTON <---
+            GestureDetector(
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const NotificationsPage()),
+                );
+              },
+              child: Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(color: primaryRed, shape: BoxShape.circle),
+                child: const Icon(Icons.notifications, color: Colors.white, size: 20),
+              ),
+            ),
+            const SizedBox(width: 12),
+
+            // DECODED AVATAR WIDGET ADDED HERE
+            CircleAvatar(
+              radius: 18,
+              backgroundColor: Colors.white.withValues(alpha: 0.15),
+              backgroundImage: avatarBase64 != null && avatarBase64.isNotEmpty ? MemoryImage(base64Decode(avatarBase64)) : null,
+              child: (avatarBase64 == null || avatarBase64.isEmpty) ? const Icon(Icons.person, color: Colors.white, size: 20) : null,
+            ),
+          ],
+        )
+      ],
+    );
+  }
+
+  // --- MASTER CARD ---
+  Widget _buildMasterCard(double totalEarned, double pendingPayment) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(24),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 30, sigmaY: 30),
+        child: Container(
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [Colors.white.withValues(alpha: 0.2), Colors.white.withValues(alpha: 0.05)]),
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.3)),
+            boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.1), blurRadius: 20, offset: const Offset(0, 10))],
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Text("Salary History", style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
-                              const SizedBox(height: 8),
-                              Text("View monthly earnings and payment status.", style: TextStyle(color: theme.textTheme.bodyMedium?.color?.withOpacity(0.6))),
-                            ],
-                          ),
-                        ),
-                        IconButton(
-                          icon: const Icon(Icons.print, color: Color(0xff45a182), size: 28),
-                          tooltip: "Print Full Statement",
-                          onPressed: () async {
-                            if (user == null) return;
+                    const Text("Payments", style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.white)),
+                    const SizedBox(height: 4),
+                    Text("Overview of recent faculty distributions.", style: TextStyle(color: Colors.white.withValues(alpha: 0.7), fontSize: 13)),
 
-                            final userDoc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
-                            double hourlyRate = 0.0;
-                            String name = 'Faculty Member';
-                            String dept = 'General';
+                    const SizedBox(height: 24),
 
-                            if (userDoc.exists) {
-                              var data = userDoc.data()!;
-                              hourlyRate = (data['hourlyRate'] is int)
-                                  ? (data['hourlyRate'] as int).toDouble()
-                                  : (data['hourlyRate'] as double? ?? 0.0);
+                    Text("TOTAL EARNED (YTD)", style: TextStyle(color: Colors.white.withValues(alpha: 0.6), fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 1)),
+                    const SizedBox(height: 4),
+                    FittedBox(fit: BoxFit.scaleDown, child: Text("₹${totalEarned.toStringAsFixed(2)}", style: TextStyle(fontSize: 32, fontWeight: FontWeight.w800, color: successGreen))),
 
-                              name = data['name'] ?? 'Faculty Member';
-                              dept = data['department'] ?? 'General';
-                            }
+                    const SizedBox(height: 24),
 
-                            final snapshot = await FirebaseFirestore.instance
-                                .collection('attendance')
-                                .where('uid', isEqualTo: user.uid)
-                                .orderBy('date', descending: true)
-                                .get();
-
-                            if (snapshot.docs.isNotEmpty) {
-                              double totalPaid = 0.0;
-                              for (var doc in snapshot.docs) {
-                                if (doc['status'] == 'Paid') {
-                                  totalPaid += (doc['lectures'] as int) * hourlyRate;
-                                }
-                              }
-
-                              ReportService.printHistoryReport(
-                                title: "Faculty Statement",
-                                subtitle: "Full History of Lectures and Payment Status",
-                                docs: snapshot.docs,
-                                isAdminReport: false,
-                                singleFacultyName: name,
-                                singleFacultyDept: dept,
-                                singleFacultyRate: hourlyRate,
-                                totalAmountPaid: totalPaid,
-                              );
-                            } else {
-                              if (context.mounted) {
-                                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("No records to print")));
-                              }
-                            }
-                          },
-                        ),
-                      ],
-                    ),
-
-                    const SizedBox(height: 32),
-
-                    StreamBuilder<DocumentSnapshot>(
-                      stream: FirebaseFirestore.instance.collection('users').doc(user!.uid).snapshots(),
-                      builder: (context, userSnap) {
-                        if (!userSnap.hasData) return const LinearProgressIndicator();
-
-                        final userData = userSnap.data!.data() as Map<String, dynamic>;
-
-                        final double hourlyRate = (userData['hourlyRate'] is int)
-                            ? (userData['hourlyRate'] as int).toDouble()
-                            : (userData['hourlyRate'] as double? ?? 0.0);
-
-                        final String name = userData['name'] ?? 'Faculty Member';
-                        final String dept = userData['department'] ?? 'General';
-
-                        return _buildSalaryContent(context, user.uid, hourlyRate, name, dept);
-                      },
-                    ),
+                    Text("PENDING PAYMENT", style: TextStyle(color: Colors.white.withValues(alpha: 0.6), fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 1)),
+                    const SizedBox(height: 4),
+                    FittedBox(fit: BoxFit.scaleDown, child: Text("₹${pendingPayment.toStringAsFixed(2)}", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white))),
                   ],
                 ),
               ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSalaryContent(BuildContext context, String uid, double hourlyRate, String name, String dept) {
-    final isDesktop = MediaQuery.of(context).size.width > 800;
-
-    return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance
-          .collection('attendance')
-          .where('uid', isEqualTo: uid)
-          .orderBy('date', descending: true)
-          .snapshots(),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator());
-        }
-
-        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-          return _emptyState(context);
-        }
-
-        Map<String, List<QueryDocumentSnapshot>> groupedData = {};
-
-        for (var doc in snapshot.data!.docs) {
-          Timestamp ts = doc['date'];
-          String monthKey = DateFormat('MMMM yyyy').format(ts.toDate());
-
-          if (!groupedData.containsKey(monthKey)) {
-            groupedData[monthKey] = [];
-          }
-          groupedData[monthKey]!.add(doc);
-        }
-
-        double totalEarnedYTD = 0;
-        double pendingPayment = 0;
-
-        for (var doc in snapshot.data!.docs) {
-          int lectures = doc['lectures'];
-          String status = doc['status'];
-          if (status == 'Paid') {
-            totalEarnedYTD += (lectures * hourlyRate);
-          } else if (status == 'Verified') {
-            pendingPayment += (lectures * hourlyRate);
-          }
-        }
-
-        return Column(
-          children: [
-            if (isDesktop)
-              Row(
-                children: [
-                  Expanded(child: _SummaryCard(title: "TOTAL EARNED", value: "\₹${totalEarnedYTD.toStringAsFixed(2)}", icon: Icons.account_balance_wallet, color: Colors.green)),
-                  const SizedBox(width: 20),
-                  Expanded(child: _SummaryCard(title: "PENDING PAYMENT", value: "\₹${pendingPayment.toStringAsFixed(2)}", icon: Icons.hourglass_empty, color: Colors.orange)),
-                ],
-              )
-            else
-              Column(
-                children: [
-                  _SummaryCard(title: "TOTAL EARNED", value: "\₹${totalEarnedYTD.toStringAsFixed(2)}", icon: Icons.account_balance_wallet, color: Colors.green),
-                  const SizedBox(height: 16),
-                  _SummaryCard(title: "PENDING PAYMENT", value: "\₹${pendingPayment.toStringAsFixed(2)}", icon: Icons.hourglass_empty, color: Colors.orange),
-                ],
-              ),
-
-            const SizedBox(height: 32),
-
-            const Align(
-                alignment: Alignment.centerLeft,
-                child: Text("Monthly Breakdown", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold))
-            ),
-            const SizedBox(height: 16),
-
-            ...groupedData.entries.map((entry) {
-              return _MonthlyRow(
-                month: entry.key,
-                docs: entry.value,
-                hourlyRate: hourlyRate,
-                facultyName: name,
-                department: dept,
-              );
-            }).toList(),
-          ],
-        );
-      },
-    );
-  }
-
-  Widget _emptyState(BuildContext context) {
-    final theme = Theme.of(context);
-    return Container(
-      padding: const EdgeInsets.all(32),
-      width: double.infinity,
-      decoration: BoxDecoration(color: theme.cardColor, borderRadius: BorderRadius.circular(12)),
-      child: const Center(child: Text("No attendance records found yet.")),
-    );
-  }
-}
-
-class _MonthlyRow extends StatelessWidget {
-  final String month;
-  final List<QueryDocumentSnapshot> docs;
-  final double hourlyRate;
-  final String facultyName;
-  final String department;
-
-  const _MonthlyRow({
-    required this.month,
-    required this.docs,
-    required this.hourlyRate,
-    required this.facultyName,
-    required this.department,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final isDesktop = MediaQuery.of(context).size.width > 800;
-
-    int totalLectures = 0;
-    double totalAmount = 0;
-    bool hasPending = false;
-    bool hasVerified = false;
-    bool isAllPaid = true;
-
-    for (var doc in docs) {
-      int l = doc['lectures'] as int;
-      totalLectures += l;
-      totalAmount += (l * hourlyRate);
-
-      String status = doc['status'];
-      if (status == 'Pending') { hasPending = true; isAllPaid = false; }
-      if (status == 'Verified') { hasVerified = true; isAllPaid = false; }
-    }
-
-    String statusText = "Processing";
-    Color statusColor = Colors.blue;
-
-    if (isAllPaid) {
-      statusText = "Paid";
-      statusColor = Colors.green;
-    } else if (hasPending) {
-      statusText = "Pending Review";
-      statusColor = Colors.orange;
-    } else if (hasVerified) {
-      statusText = "Approved";
-      statusColor = Colors.purple;
-    }
-
-    Widget leftSide = Row(
-      children: [
-        Container(
-          padding: const EdgeInsets.all(10),
-          decoration: BoxDecoration(
-              color: theme.brightness == Brightness.dark ? Colors.grey.shade800 : Colors.grey.shade100,
-              borderRadius: BorderRadius.circular(8)
-          ),
-          child: const Icon(Icons.calendar_month, color: Colors.grey),
-        ),
-        const SizedBox(width: 16),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(month, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16), overflow: TextOverflow.ellipsis),
-              Text("$totalLectures Lectures Recorded", style: const TextStyle(color: Colors.grey, fontSize: 12), overflow: TextOverflow.ellipsis),
+              const SizedBox(width: 16),
+              Image.asset('assets/images/bank.png', width: 100, height: 100, fit: BoxFit.contain),
             ],
           ),
         ),
-      ],
-    );
-
-    Widget statusPill = Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      decoration: BoxDecoration(color: statusColor.withOpacity(0.1), borderRadius: BorderRadius.circular(20)),
-      child: Text(statusText, style: TextStyle(color: statusColor, fontWeight: FontWeight.bold, fontSize: 12)),
-    );
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: theme.cardColor,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 5)],
-      ),
-      child: isDesktop
-          ? Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Expanded(child: leftSide),
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text("\₹${totalAmount.toStringAsFixed(2)}", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-              const SizedBox(width: 24),
-              statusPill,
-              if (isAllPaid) ...[
-                const SizedBox(width: 12),
-                IconButton(
-                  icon: const Icon(Icons.download, color: Colors.grey),
-                  tooltip: "Download Receipt",
-                  onPressed: () => _downloadReceipt(totalLectures, totalAmount),
-                )
-              ]
-            ],
-          )
-        ],
-      )
-          : Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Expanded(child: leftSide),
-              statusPill,
-            ],
-          ),
-          const SizedBox(height: 16),
-          Divider(color: Colors.grey.withOpacity(0.2)),
-          const SizedBox(height: 8),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Text("Total Earnings:", style: TextStyle(color: Colors.grey)),
-              Row(
-                children: [
-                  Text("\₹${totalAmount.toStringAsFixed(2)}", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                  if (isAllPaid) ...[
-                    const SizedBox(width: 8),
-                    IconButton(
-                      icon: const Icon(Icons.download, color: Colors.grey),
-                      tooltip: "Download Receipt",
-                      padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(),
-                      onPressed: () => _downloadReceipt(totalLectures, totalAmount),
-                    )
-                  ]
-                ],
-              )
-            ],
-          ),
-        ],
       ),
     );
   }
 
-  void _downloadReceipt(int totalLectures, double totalAmount) {
-    List<List<String>> receiptDetails = [];
-
-    for (var doc in docs) {
-      final d = doc.data() as Map<String, dynamic>;
-      DateTime dt = (d['date'] as Timestamp).toDate();
-      int lecs = d['lectures'] as int;
-      double rowTotal = lecs * hourlyRate;
-
-      receiptDetails.add([
-        DateFormat('dd MMM yyyy').format(dt),
-        d['subject'] ?? '-',
-        lecs.toString(),
-        "₹ ${hourlyRate.toStringAsFixed(2)}",
-        "₹ ${rowTotal.toStringAsFixed(2)}"
-      ]);
-    }
-
-    ReceiptService.printReceipt(
-      facultyName: facultyName,
-      department: department,
-      month: month,
-      totalLectures: totalLectures,
-      ratePerLecture: hourlyRate,
-      totalAmount: totalAmount,
-      paymentDate: DateFormat('yyyy-MM-dd').format(DateTime.now()),
-      receiptId: "SLIP-${month.replaceAll(' ', '-')}",
-      lectureDetails: receiptDetails,
-    );
-  }
-}
-
-class _SummaryCard extends StatelessWidget {
-  final String title;
-  final String value;
-  final IconData icon;
-  final Color color;
-
-  const _SummaryCard({required this.title, required this.value, required this.icon, required this.color});
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
+  // --- TABS ---
+  Widget _buildSegmentedTabs() {
     return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        color: theme.cardColor,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10)],
-      ),
+      decoration: BoxDecoration(color: Colors.transparent, borderRadius: BorderRadius.circular(30)),
       child: Row(
         children: [
-          CircleAvatar(backgroundColor: color.withOpacity(0.1), child: Icon(icon, color: color)),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(title, style: const TextStyle(color: Colors.grey, fontSize: 12, fontWeight: FontWeight.bold)),
-                const SizedBox(height: 4),
-                Text(value, style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
-              ],
-            ),
-          ),
+          _buildTab("All Payments", 0),
+          const SizedBox(width: 8),
+          _buildTab("Completed", 1),
+          const SizedBox(width: 8),
+          _buildTab("Pending", 2),
         ],
+      ),
+    );
+  }
+
+  Widget _buildTab(String title, int index) {
+    bool isActive = _currentTabIndex == index;
+    return Expanded(
+      child: GestureDetector(
+        onTap: () => setState(() => _currentTabIndex = index),
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 10),
+          decoration: BoxDecoration(
+            color: isActive ? primaryRed : Colors.transparent,
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(color: isActive ? primaryRed : Colors.white.withValues(alpha: 0.2)),
+          ),
+          alignment: Alignment.center,
+          child: Text(
+            title,
+            style: TextStyle(color: isActive ? Colors.white : Colors.white.withValues(alpha: 0.8), fontWeight: isActive ? FontWeight.w600 : FontWeight.normal, fontSize: 13),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // --- MONTHLY LIST BUILDER ---
+  List<Widget> _buildMonthlyList(Map<String, List<QueryDocumentSnapshot>> groupedData, double hourlyRate, String facultyName, String department) {
+    List<Widget> items = [];
+
+    for (var entry in groupedData.entries) {
+      String month = entry.key;
+      List<QueryDocumentSnapshot> docs = entry.value;
+
+      int totalLectures = 0;
+      double totalAmount = 0;
+      bool hasPending = false;
+      bool hasVerified = false;
+      bool isAllPaid = true;
+
+      for (var doc in docs) {
+        int l = doc['lectures'] as int? ?? 0;
+        totalLectures += l;
+        totalAmount += (l * hourlyRate);
+
+        String status = doc['status'];
+        if (status == 'Pending') { hasPending = true; isAllPaid = false; }
+        if (status == 'Verified') { hasVerified = true; isAllPaid = false; }
+      }
+
+      String statusText = "Processing";
+      Color statusColor = processingBlue;
+      IconData icon = Icons.pending_actions;
+
+      if (isAllPaid) {
+        statusText = "COMPLETED";
+        statusColor = successGreen;
+        icon = Icons.check_circle;
+      } else if (hasVerified) {
+        statusText = "APPROVED";
+        statusColor = processingBlue;
+        icon = Icons.verified;
+      } else if (hasPending) {
+        statusText = "PENDING";
+        statusColor = pendingOrange;
+        icon = Icons.hourglass_empty;
+      }
+
+      // Tab Filtering Logic
+      if (_currentTabIndex == 1 && !isAllPaid) continue; // Show only Paid
+      if (_currentTabIndex == 2 && isAllPaid) continue; // Show only Pending/Approved
+
+      items.add(
+          _buildTransactionItem(
+            icon: icon,
+            title: "$month Salary",
+            amount: "₹${totalAmount.toStringAsFixed(2)}",
+            status: statusText,
+            statusColor: statusColor,
+            isCompleted: isAllPaid,
+            docs: docs,
+            facultyName: facultyName,
+            department: department,
+            hourlyRate: hourlyRate,
+            month: month,
+            totalLectures: totalLectures,
+            totalAmount: totalAmount,
+          )
+      );
+    }
+
+    if (items.isEmpty) {
+      return [Padding(padding: const EdgeInsets.only(top: 40), child: Center(child: Text("No records found for this filter.", style: TextStyle(color: Colors.white.withValues(alpha: 0.5)))))];
+    }
+
+    return items;
+  }
+
+  Widget _buildTransactionItem({
+    required IconData icon,
+    required String title,
+    required String amount,
+    required String status,
+    required Color statusColor,
+    required bool isCompleted,
+    required List<QueryDocumentSnapshot> docs,
+    required String facultyName,
+    required String department,
+    required double hourlyRate,
+    required String month,
+    required int totalLectures,
+    required double totalAmount,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(color: const Color(0xFF2A2E39), borderRadius: BorderRadius.circular(16), border: Border.all(color: Colors.white.withValues(alpha: 0.05))),
+        child: Row(
+          children: [
+            Container(
+                width: 42, height: 42,
+                decoration: BoxDecoration(color: isCompleted ? successGreen : const Color(0xFF4A5060), shape: BoxShape.circle),
+                child: Icon(icon, color: Colors.white, size: 20)
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title, style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600)),
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      Text(amount, style: const TextStyle(color: Colors.white, fontSize: 19, fontWeight: FontWeight.bold)),
+                      if (isCompleted) ...[
+                        const SizedBox(width: 12),
+                        // RECEIPT DOWNLOAD BUTTON
+                        GestureDetector(
+                          onTap: () {
+                            List<List<String>> receiptDetails = [];
+                            for (var doc in docs) {
+                              final d = doc.data() as Map<String, dynamic>;
+                              DateTime dt = (d['date'] as Timestamp).toDate();
+                              int lecs = d['lectures'] as int;
+                              double rowTotal = lecs * hourlyRate;
+
+                              receiptDetails.add([
+                                DateFormat('dd MMM yyyy').format(dt),
+                                d['subject'] ?? '-',
+                                lecs.toString(),
+                                "₹ ${hourlyRate.toStringAsFixed(2)}",
+                                "₹ ${rowTotal.toStringAsFixed(2)}"
+                              ]);
+                            }
+
+                            ReceiptService.printReceipt(
+                              facultyName: facultyName,
+                              department: department,
+                              month: month,
+                              totalLectures: totalLectures,
+                              ratePerLecture: hourlyRate,
+                              totalAmount: totalAmount,
+                              paymentDate: DateFormat('yyyy-MM-dd').format(DateTime.now()),
+                              receiptId: "SLIP-${month.replaceAll(' ', '-')}",
+                              lectureDetails: receiptDetails,
+                            );
+                          },
+                          child: Container(
+                            padding: const EdgeInsets.all(6),
+                            decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(8)),
+                            child: const Icon(Icons.download, color: Colors.white, size: 16),
+                          ),
+                        )
+                      ]
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(color: statusColor.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(20), border: Border.all(color: statusColor.withValues(alpha: 0.3))),
+              child: Text(status, style: TextStyle(color: statusColor, fontSize: 10, fontWeight: FontWeight.w800, letterSpacing: 1)),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // --- FLOATING NAV ---
+  Widget _buildFloatingBottomNav() {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(40),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 7, sigmaY: 7), // Reduced blur for clarity
+        child: Container(
+          height: 70,
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  Colors.white.withValues(alpha: 0.03), // Almost completely transparent
+                  Colors.transparent // 0.0 alpha
+                ]
+            ),
+            borderRadius: BorderRadius.circular(40),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.05)), // Whisper thin border
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            children: [
+              _buildNavItem(Icons.home, "HOME", 0),
+              _buildNavItem(Icons.edit_document, "LOG", 1),
+              _buildNavItem(Icons.account_balance_wallet, "PAY", 2),
+              _buildNavItem(Icons.person, "MY PROFILE", 3), // Updated to match the wrapper
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildNavItem(IconData icon, String label, int index) {
+    bool isActive = _currentNavIndex == index;
+    final color = isActive ? primaryRed : Colors.white.withValues(alpha: 0.4);
+    return GestureDetector(
+      onTap: () {
+        setState(() => _currentNavIndex = index);
+      },
+      child: Container(
+        color: Colors.transparent,
+        width: 60,
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, color: color, size: 24),
+            const SizedBox(height: 4),
+            Text(label, style: TextStyle(color: color, fontSize: 8, fontWeight: FontWeight.bold, letterSpacing: 0.5), maxLines: 1, overflow: TextOverflow.ellipsis),
+            if (isActive)
+              Container(margin: const EdgeInsets.only(top: 4), height: 3, width: 20, decoration: BoxDecoration(color: primaryRed, borderRadius: BorderRadius.circular(2)))
+          ],
+        ),
       ),
     );
   }

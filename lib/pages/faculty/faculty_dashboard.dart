@@ -1,60 +1,132 @@
-import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:intl/intl.dart';
+import 'dart:ui';
 import 'dart:convert';
-import '../../widgets/app_sidebars.dart';
+import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:intl/intl.dart';
 
-class FacultyDashboard extends StatelessWidget {
-  const FacultyDashboard({super.key});
+import 'add_attendance_page.dart';
+import 'faculty_salary_summary_page.dart';
+import 'faculty_profile_page.dart';
+import 'notifications_page.dart';
+
+class FadeIndexedStack extends StatefulWidget {
+  final int index;
+  final List<Widget> children;
+  final Duration duration;
+
+  const FadeIndexedStack({
+    super.key,
+    required this.index,
+    required this.children,
+    this.duration = const Duration(milliseconds: 300),
+  });
+
+  @override
+  State<FadeIndexedStack> createState() => _FadeIndexedStackState();
+}
+
+class _FadeIndexedStackState extends State<FadeIndexedStack> with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+
+  @override
+  void initState() {
+    _controller = AnimationController(vsync: this, duration: widget.duration);
+    _controller.forward();
+    super.initState();
+  }
+
+  @override
+  void didUpdateWidget(FadeIndexedStack oldWidget) {
+    if (widget.index != oldWidget.index) {
+      _controller.forward(from: 0.0);
+    }
+    super.didUpdateWidget(oldWidget);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-    final user = FirebaseAuth.instance.currentUser;
-    final isDesktop = MediaQuery.of(context).size.width > 800;
-    final theme = Theme.of(context);
+    return FadeTransition(
+      opacity: _controller,
+      child: IndexedStack(
+        index: widget.index,
+        children: widget.children,
+      ),
+    );
+  }
+}
+
+class FacultyDashboard extends StatefulWidget {
+  const FacultyDashboard({super.key, required int initialIndex});
+
+  @override
+  State<FacultyDashboard> createState() => _FacultyDashboardState();
+}
+
+class _FacultyDashboardState extends State<FacultyDashboard> {
+  int _currentNavIndex = 0;
+
+  final List<Widget> _pages = const [
+    _FacultyDashboardHomeContent(),
+    AddAttendancePage(),
+    FacultySalaryHistoryPage(),
+    FacultyProfilePage(),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    final Color primaryRed = const Color(0xFFE05B5C);
 
     return Scaffold(
-      appBar: isDesktop
-          ? null
-          : AppBar(
-        title: const Text("Faculty Portal"),
-        elevation: 0,
-      ),
-      drawer: isDesktop
-          ? null
-          : const Drawer(
-        child: FacultySidebar(activeRoute: '/faculty/dashboard'),
-      ),
-      body: Row(
+      backgroundColor: const Color(0xFF282C37),
+      body: Stack(
         children: [
-          if (isDesktop) const FacultySidebar(activeRoute: '/faculty/dashboard'),
+          // The pages with smooth transition
+          FadeIndexedStack(
+            index: _currentNavIndex,
+            children: _pages,
+          ),
 
-          // MAIN CONTENT
-          Expanded(
-            // ✅ 1. Wrap the content in a RefreshIndicator
-            child: RefreshIndicator(
-              color: theme.primaryColor,
-              backgroundColor: theme.cardColor,
-              onRefresh: () async {
-                await Future.delayed(const Duration(milliseconds: 1200));
-              },
-              child: SingleChildScrollView(
-                // ✅ 2. Always scrollable physics
-                physics: const AlwaysScrollableScrollPhysics(),
-                padding: EdgeInsets.all(isDesktop ? 32 : 16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _buildHeader(context, user),
-                    const SizedBox(height: 32),
-                    _buildStatsRow(user, isDesktop),
-                    const SizedBox(height: 32),
-                    const Text("Recent Attendance History",
-                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 16),
-                    _buildRecentActivityTable(context, user),
-                  ],
+          // Floating Navigation Bar (Crystal Clear Glass)
+          Positioned(
+            bottom: 30,
+            left: 20,
+            right: 20,
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(40),
+              child: BackdropFilter(
+                // 1. DECREASED BLUR so the background is clearer
+                filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
+                child: Container(
+                  height: 70,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: [
+                          // 2. INCREASED TRANSPARENCY (almost completely clear)
+                          Colors.white.withValues(alpha: 0.03),
+                          Colors.transparent, // 0.0 alpha
+                        ]),
+                    borderRadius: BorderRadius.circular(40),
+                    // Delicate border to define the edge of the glass
+                    border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    children: [
+                      _buildNavItem(Icons.home, "HOME", 0, primaryRed),
+                      _buildNavItem(Icons.edit_document, "LOG", 1, primaryRed),
+                      _buildNavItem(Icons.account_balance_wallet, "PAY", 2, primaryRed),
+                      _buildNavItem(Icons.person, "MY PROFILE", 3, primaryRed),
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -64,207 +136,397 @@ class FacultyDashboard extends StatelessWidget {
     );
   }
 
-  Widget _buildHeader(BuildContext context, User? user) {
-    final theme = Theme.of(context);
+  Widget _buildNavItem(IconData icon, String label, int index, Color primaryRed) {
+    bool isActive = _currentNavIndex == index;
+    final color = isActive ? primaryRed : Colors.white.withValues(alpha: 0.4);
+    return Expanded(
+      child: GestureDetector(
+        onTap: () {
+          setState(() {
+            _currentNavIndex = index;
+          });
+        },
+        child: Container(
+          color: Colors.transparent,
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon, color: color, size: 24),
+              const SizedBox(height: 4),
+              Text(label,
+                  style: TextStyle(
+                      color: color,
+                      fontSize: 8,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 0.5),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis),
+              if (isActive)
+                Container(
+                    margin: const EdgeInsets.only(top: 4),
+                    height: 3,
+                    width: 20,
+                    decoration: BoxDecoration(
+                        color: primaryRed,
+                        borderRadius: BorderRadius.circular(2)))
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+// --------------------------------------------------------
+// DASHBOARD CONTENT
+// --------------------------------------------------------
+class _FacultyDashboardHomeContent extends StatefulWidget {
+  const _FacultyDashboardHomeContent();
 
-    return StreamBuilder<DocumentSnapshot>(
-      stream: FirebaseFirestore.instance.collection('users').doc(user?.uid).snapshots(),
-      builder: (context, snapshot) {
-        String name = "Faculty Member";
-        String? avatarBase64;
-        if (snapshot.hasData && snapshot.data!.exists) {
-          name = snapshot.data!['name'] ?? "Faculty Member";
-          avatarBase64 = snapshot.data!['avatarBase64'];
-        }
-        return Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          crossAxisAlignment: CrossAxisAlignment.start,
+  @override
+  State<_FacultyDashboardHomeContent> createState() => _FacultyDashboardHomeContentState();
+}
+
+class _FacultyDashboardHomeContentState extends State<_FacultyDashboardHomeContent> {
+  final Color primaryRed = const Color(0xFFE05B5C);
+  final Color successGreen = const Color(0xFF4ADE80);
+  final Color pendingOrange = const Color(0xFFFBBF24);
+  final Color verifiedBlue = const Color(0xFF60A5FA);
+
+  final User? currentUser = FirebaseAuth.instance.currentUser;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.transparent, // Background handled by parent, but we add gradient
+      body: Stack(
+        children: [
+          // 1. Background Gradient
+          Container(
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [Color(0xFF3B4154), Color(0xFF1E212A)],
+              ),
+            ),
+          ),
+
+          // 2. FIREBASE BOUND TOP AREA (Header & Master Card)
+          StreamBuilder<DocumentSnapshot>(
+              stream: FirebaseFirestore.instance.collection('users').doc(currentUser?.uid).snapshots(),
+              builder: (context, userSnap) {
+                // Default Fallbacks
+                String name = "Faculty Member";
+                String? avatarBase64;
+                double hourlyRate = 0.0;
+
+                if (userSnap.hasData && userSnap.data!.exists) {
+                  final data = userSnap.data!.data() as Map<String, dynamic>?;
+                  if (data != null) {
+                    name = data['name'] ?? name;
+                    avatarBase64 = data['avatarBase64'];
+                    hourlyRate = (data['hourlyRate'] is int)
+                        ? (data['hourlyRate'] as int).toDouble()
+                        : (data['hourlyRate'] as double? ?? 0.0);
+                  }
+                }
+
+                return SafeArea(
+                  bottom: false,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
+                        child: _buildHeader(avatarBase64),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 20),
+                        child: _buildMasterCard(name, hourlyRate),
+                      ),
+                    ],
+                  ),
+                );
+              }),
+
+          // 3. THE DRAGGABLE BOTTOM SHEET (With Firebase History)
+          DraggableScrollableSheet(
+            initialChildSize: 0.58,
+            minChildSize: 0.58,
+            maxChildSize: 0.88,
+            snap: true,
+            builder: (BuildContext context, ScrollController scrollController) {
+              return Container(
+                decoration: BoxDecoration(
+                  color: const Color(0xFF242832),
+                  borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
+                  boxShadow: [
+                    BoxShadow(color: Colors.black.withValues(alpha: 0.3), blurRadius: 20, offset: const Offset(0, -5))
+                  ],
+                ),
+                child: Column(
+                  children: [
+                    // --- DRAG HANDLE AREA ---
+                    SingleChildScrollView(
+                      controller: scrollController,
+                      physics: const ClampingScrollPhysics(),
+                      child: Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.only(top: 16, bottom: 20),
+                        color: Colors.transparent,
+                        child: Center(
+                          child: Container(
+                            width: 40,
+                            height: 4,
+                            decoration: BoxDecoration(
+                                color: Colors.white.withValues(alpha: 0.2),
+                                borderRadius: BorderRadius.circular(2)),
+                          ),
+                        ),
+                      ),
+                    ),
+
+                    // --- FIREBASE SALARY LIST ---
+                    Expanded(
+                      child: ListView(
+                        padding: const EdgeInsets.only(left: 20, right: 20, bottom: 120),
+                        physics: const BouncingScrollPhysics(),
+                        children: [
+                          const Text(
+                            "Recent Salary Records",
+                            style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white,
+                                letterSpacing: 0.5),
+                          ),
+                          const SizedBox(height: 20),
+                          _buildFirebaseSalaryList(),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildHeader(String? avatarBase64) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Expanded(child: Text("FacultyPay", style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold, color: Colors.white, letterSpacing: -0.5), overflow: TextOverflow.ellipsis)),
+        Row(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+            // ---> CLICKABLE NOTIFICATION BUTTON <---
+            GestureDetector(
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const NotificationsPage()),
+                );
+              },
+              child: Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(color: primaryRed, shape: BoxShape.circle),
+                child: const Icon(Icons.notifications, color: Colors.white, size: 20),
+              ),
+            ),
+            const SizedBox(width: 12),
+            CircleAvatar(
+              radius: 18,
+              backgroundColor: Colors.white.withValues(alpha: 0.15),
+              backgroundImage: avatarBase64 != null && avatarBase64.isNotEmpty ? MemoryImage(base64Decode(avatarBase64)) : null,
+              child: (avatarBase64 == null || avatarBase64.isEmpty) ? const Icon(Icons.person, color: Colors.white, size: 20) : null,
+            ),
+          ],
+        )
+      ],
+    );
+  }
+
+  Widget _buildMasterCard(String name, double hourlyRate) {
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance.collection('attendance').where('uid', isEqualTo: currentUser?.uid).snapshots(),
+      builder: (context, snapshot) {
+        int totalLectures = 0;
+        int verifiedLectures = 0;
+
+        if (snapshot.hasData) {
+          for (var doc in snapshot.data!.docs) {
+            final data = doc.data() as Map<String, dynamic>;
+            final count = data['lectures'] as int? ?? 0;
+            final status = data['status'] ?? 'Pending';
+
+            totalLectures += count;
+            if (status == 'Verified' || status == 'Paid') {
+              verifiedLectures += count;
+            }
+          }
+        }
+
+        double earnings = verifiedLectures * hourlyRate;
+
+        return ClipRRect(
+          borderRadius: BorderRadius.circular(24),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 30, sigmaY: 30),
+            child: Container(
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [Colors.white.withValues(alpha: 0.2), Colors.white.withValues(alpha: 0.05)]),
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(color: Colors.white.withValues(alpha: 0.3)),
+                boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.1), blurRadius: 20, offset: const Offset(0, 10))],
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
-                  Text("Welcome back, $name",
-                      style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 4),
-                  const Text("Here is your performance summary for this month.",
-                      style: TextStyle(color: Colors.grey)),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text("Good Morning,", style: TextStyle(color: Colors.white.withValues(alpha: 0.7), fontSize: 13)),
+                        const SizedBox(height: 2),
+                        Text(name, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.white), overflow: TextOverflow.ellipsis, maxLines: 1),
+                        const SizedBox(height: 24),
+                        Text("TOTAL EARNINGS", style: TextStyle(color: Colors.white.withValues(alpha: 0.6), fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 1)),
+                        const SizedBox(height: 4),
+                        FittedBox(
+                          fit: BoxFit.scaleDown,
+                          alignment: Alignment.centerLeft,
+                          child: Text("₹${earnings.toStringAsFixed(2)}", style: TextStyle(fontSize: 32, fontWeight: FontWeight.w800, color: successGreen)),
+                        ),
+                        const SizedBox(height: 24),
+                        FittedBox(
+                          fit: BoxFit.scaleDown,
+                          alignment: Alignment.centerLeft,
+                          child: Row(
+                            children: [
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text("TOTAL LECTURES", style: TextStyle(color: Colors.white.withValues(alpha: 0.6), fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 1)),
+                                  const SizedBox(height: 4),
+                                  Text("$totalLectures", style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white)),
+                                ],
+                              ),
+                              const SizedBox(width: 32),
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text("HOURLY RATE", style: TextStyle(color: Colors.white.withValues(alpha: 0.6), fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 1)),
+                                  const SizedBox(height: 4),
+                                  Text("₹${hourlyRate.toStringAsFixed(0)}", style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white)),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Image.asset('assets/images/bank.png', width: 100, height: 100, fit: BoxFit.contain),
                 ],
               ),
             ),
-            const SizedBox(width: 16),
-            CircleAvatar(
-              radius: 24,
-              backgroundColor: theme.primaryColor.withOpacity(0.1),
-              backgroundImage: avatarBase64 != null && avatarBase64.isNotEmpty
-                  ? MemoryImage(base64Decode(avatarBase64))
-                  : null,
-              child: (avatarBase64 == null || avatarBase64.isEmpty)
-                  ? Icon(Icons.person, color: theme.primaryColor)
-                  : null,
-            )
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildFirebaseSalaryList() {
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('attendance')
+          .where('uid', isEqualTo: currentUser?.uid)
+          .orderBy('date', descending: true)
+          .limit(10)
+          .snapshots(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return Center(child: CircularProgressIndicator(color: primaryRed));
+        }
+
+        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+          return Padding(
+            padding: const EdgeInsets.symmetric(vertical: 40),
+            child: Center(child: Text("No attendance records found.", style: TextStyle(color: Colors.white.withValues(alpha: 0.5)))),
+          );
+        }
+
+        return Stack(
+          children: [
+            Positioned(left: 35, top: 30, bottom: 30, child: Container(width: 1.5, color: Colors.white.withValues(alpha: 0.1))),
+            Column(
+              children: snapshot.data!.docs.map((doc) {
+                final data = doc.data() as Map<String, dynamic>;
+                DateTime date = (data['date'] as Timestamp).toDate();
+                String status = data['status'] ?? 'Pending';
+                int lecturesCount = data['lectures'] ?? 0;
+                String subject = data['subject'] ?? 'Unknown';
+
+                Color statusColor = pendingOrange;
+                IconData icon = Icons.pending_actions;
+
+                if (status.toLowerCase() == 'paid') {
+                  statusColor = successGreen;
+                  icon = Icons.check_circle;
+                } else if (status.toLowerCase() == 'verified') {
+                  statusColor = verifiedBlue;
+                  icon = Icons.verified;
+                }
+
+                return _buildSalaryItem(
+                    icon,
+                    DateFormat('MMM dd, yyyy').format(date),
+                    "$lecturesCount Lecture(s) • $subject",
+                    status.toUpperCase(),
+                    statusColor
+                );
+              }).toList(),
+            ),
           ],
         );
       },
     );
   }
 
-  Widget _buildStatsRow(User? user, bool isDesktop) {
-    if (user == null) return const SizedBox();
-
-    return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance
-          .collection('attendance')
-          .where('uid', isEqualTo: user.uid)
-          .snapshots(),
-      builder: (context, snapshot) {
-        if (!snapshot.hasData) return const LinearProgressIndicator();
-
-        int totalLectures = 0;
-        int verifiedLectures = 0;
-
-        for (var doc in snapshot.data!.docs) {
-          totalLectures += (doc['lectures'] as int);
-          if (doc['status'] == 'Verified' || doc['status'] == 'Paid') {
-            verifiedLectures += (doc['lectures'] as int);
-          }
-        }
-
-        return FutureBuilder<DocumentSnapshot>(
-            future: FirebaseFirestore.instance.collection('users').doc(user.uid).get(),
-            builder: (context, userSnap) {
-              double rate = 0;
-              if (userSnap.hasData && userSnap.data!.exists) {
-                rate = (userSnap.data!['hourlyRate'] ?? 0).toDouble();
-              }
-              double earnings = verifiedLectures * rate;
-
-              if (!isDesktop) {
-                return Column(
-                  children: [
-                    _StatCard(title: "Total Earnings", value: "\₹${earnings.toStringAsFixed(2)}", icon: Icons.currency_rupee, color: const Color(0xff45a182)),
-                    const SizedBox(height: 16),
-                    _StatCard(title: "Total Lectures", value: "$totalLectures", icon: Icons.class_outlined, color: Colors.blueAccent),
-                    const SizedBox(height: 16),
-                    _StatCard(title: "Hourly Rate", value: "\₹${rate.toStringAsFixed(0)}", icon: Icons.access_time, color: Colors.orangeAccent),
-                  ],
-                );
-              }
-
-              return Row(
+  Widget _buildSalaryItem(IconData icon, String title, String details, String status, Color statusColor) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(color: const Color(0xFF2A2E39), borderRadius: BorderRadius.circular(16), border: Border.all(color: Colors.white.withValues(alpha: 0.05))),
+        child: Row(
+          children: [
+            Container(width: 42, height: 42, decoration: const BoxDecoration(color: Color(0xFF4A5060), shape: BoxShape.circle), child: Icon(icon, color: Colors.white, size: 20)),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Expanded(child: _StatCard(title: "Total Earnings", value: "\₹${earnings.toStringAsFixed(2)}", icon: Icons.currency_rupee, color: const Color(0xff45a182))),
-                  const SizedBox(width: 20),
-                  Expanded(child: _StatCard(title: "Total Lectures", value: "$totalLectures", icon: Icons.class_outlined, color: Colors.blueAccent)),
-                  const SizedBox(width: 20),
-                  Expanded(child: _StatCard(title: "Hourly Rate", value: "\₹${rate.toStringAsFixed(0)}", icon: Icons.access_time, color: Colors.orangeAccent)),
+                  Text(title, style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600)),
+                  const SizedBox(height: 4),
+                  Text(details, style: TextStyle(color: Colors.white.withValues(alpha: 0.6), fontSize: 13, fontWeight: FontWeight.w500)),
                 ],
-              );
-            });
-      },
-    );
-  }
-
-  Widget _buildRecentActivityTable(BuildContext context, User? user) {
-    final theme = Theme.of(context);
-
-    if (user == null) return const SizedBox();
-
-    return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance
-          .collection('attendance')
-          .where('uid', isEqualTo: user.uid)
-          .orderBy('date', descending: true)
-          .limit(5)
-          .snapshots(),
-      builder: (context, snapshot) {
-        if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
-        if (snapshot.data!.docs.isEmpty) {
-          return Container(
-            padding: const EdgeInsets.all(24),
-            width: double.infinity,
-            decoration: BoxDecoration(color: theme.cardColor, borderRadius: BorderRadius.circular(12)),
-            child: const Text("No attendance records found. Start by adding one!", style: TextStyle(color: Colors.grey)),
-          );
-        }
-
-        return Container(
-          decoration: BoxDecoration(
-            color: theme.cardColor,
-            borderRadius: BorderRadius.circular(12),
-            boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4))],
-          ),
-          child: ListView.separated(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            itemCount: snapshot.data!.docs.length,
-            separatorBuilder: (context, index) => Divider(height: 1, color: Colors.grey.withOpacity(0.2)),
-            itemBuilder: (context, index) {
-              final data = snapshot.data!.docs[index].data() as Map<String, dynamic>;
-              DateTime date = (data['date'] as Timestamp).toDate();
-              String status = data['status'] ?? 'Pending';
-              Color statusColor = status == 'Verified' || status == 'Paid' ? Colors.green : Colors.orange;
-
-              return ListTile(
-                contentPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                title: Text(DateFormat('MMM dd, yyyy').format(date), style: const TextStyle(fontWeight: FontWeight.w600)),
-                subtitle: Text("${data['lectures']} Lecture(s) • ${data['subject'] ?? '-'}"),
-                trailing: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: statusColor.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Text(status, style: TextStyle(color: statusColor, fontWeight: FontWeight.bold, fontSize: 12)),
-                ),
-              );
-            },
-          ),
-        );
-      },
-    );
-  }
-}
-
-class _StatCard extends StatelessWidget {
-  final String title;
-  final String value;
-  final IconData icon;
-  final Color color;
-
-  const _StatCard({required this.title, required this.value, required this.icon, required this.color});
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        color: theme.cardColor,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4))],
-      ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(color: color.withOpacity(0.1), shape: BoxShape.circle),
-            child: Icon(icon, color: color, size: 28),
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(title, style: const TextStyle(color: Colors.grey, fontSize: 12), overflow: TextOverflow.ellipsis),
-                const SizedBox(height: 4),
-                Text(value, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis),
-              ],
+              ),
             ),
-          ),
-        ],
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(color: statusColor.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(20), border: Border.all(color: statusColor.withValues(alpha: 0.3))),
+              child: Text(status, style: TextStyle(color: statusColor, fontSize: 10, fontWeight: FontWeight.w800, letterSpacing: 1)),
+            ),
+          ],
+        ),
       ),
     );
   }

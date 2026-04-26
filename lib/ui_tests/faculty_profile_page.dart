@@ -1,159 +1,27 @@
-import 'dart:convert';
+import 'dart:ui';
 import 'package:flutter/material.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:image_picker/image_picker.dart';
-import 'notifications_page.dart';
 
-class FacultyProfilePage extends StatefulWidget {
-  const FacultyProfilePage({super.key});
+class FacultyProfilePageUI extends StatefulWidget {
+  const FacultyProfilePageUI({super.key});
 
   @override
-  State<FacultyProfilePage> createState() => _FacultyProfilePageState();
+  State<FacultyProfilePageUI> createState() => _FacultyProfilePageUIState();
 }
 
-class _FacultyProfilePageState extends State<FacultyProfilePage> {
+class _FacultyProfilePageUIState extends State<FacultyProfilePageUI> {
   final Color primaryRed = const Color(0xFFE05B5C);
   final Color successGreen = const Color(0xFF4CAF50);
 
-  // --- FIREBASE STATE & CONTROLLERS ---
-  final User? currentUser = FirebaseAuth.instance.currentUser;
-  final TextEditingController nameController = TextEditingController();
-  final TextEditingController upiController = TextEditingController();
+  int _currentNavIndex = 3; // "MORE" tab
 
-  String? avatarBase64;
-  final ImagePicker _picker = ImagePicker();
+  // Controllers for editable fields
+  final TextEditingController nameController = TextEditingController(text: "Dr. Sarah Smith");
+  final TextEditingController upiController = TextEditingController(text: "sarah.smith@okbank");
 
-  // Read-only fields
-  String email = "";
-  String department = "N/A";
-  double hourlyRate = 0.0;
-
-  bool isLoading = true;
-  bool isSaving = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadUserData();
-  }
-
-  // --- FIREBASE LOGIC ---
-  Future<void> _loadUserData() async {
-    if (currentUser == null) return;
-
-    try {
-      final doc = await FirebaseFirestore.instance.collection('users').doc(currentUser!.uid).get();
-      if (doc.exists) {
-        final data = doc.data()!;
-        setState(() {
-          nameController.text = data['name'] ?? '';
-          upiController.text = data['upiId'] ?? '';
-          email = data['email'] ?? '';
-          department = data['department'] ?? 'N/A';
-          avatarBase64 = data['avatarBase64'];
-          hourlyRate = (data['hourlyRate'] is int)
-              ? (data['hourlyRate'] as int).toDouble()
-              : (data['hourlyRate'] as double? ?? 0.0);
-          isLoading = false;
-        });
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error loading profile: $e"), backgroundColor: primaryRed));
-      }
-      setState(() => isLoading = false);
-    }
-  }
-
-  Future<void> _updateProfile() async {
-    if (nameController.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: const Text("Name cannot be empty"), backgroundColor: primaryRed));
-      return;
-    }
-
-    setState(() => isSaving = true);
-
-    try {
-      await FirebaseFirestore.instance.collection('users').doc(currentUser!.uid).update({
-        'name': nameController.text.trim(),
-        'upiId': upiController.text.trim(),
-      });
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: const Text("Profile updated successfully!"), backgroundColor: successGreen));
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error updating profile: $e"), backgroundColor: primaryRed));
-      }
-    } finally {
-      if (mounted) setState(() => isSaving = false);
-    }
-  }
-
-  Future<void> _pickImage() async {
-    try {
-      final XFile? image = await _picker.pickImage(
-        source: ImageSource.gallery,
-        maxWidth: 256,
-        maxHeight: 256,
-        imageQuality: 50,
-      );
-
-      if (image != null) {
-        final bytes = await image.readAsBytes();
-        final base64Str = base64Encode(bytes);
-        setState(() {
-          avatarBase64 = base64Str;
-        });
-
-        await FirebaseFirestore.instance.collection('users').doc(currentUser!.uid).update({
-          'avatarBase64': base64Str,
-        });
-
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: const Text("Profile picture updated!"), backgroundColor: successGreen));
-        }
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error picking image: $e"), backgroundColor: primaryRed));
-      }
-    }
-  }
-
-  // --- LOGOUT LOGIC ---
-  Future<void> _logout() async {
-    // Show confirmation dialog before logging out
-    bool? confirm = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF2A2E39),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text("Log Out", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-        content: Text("Are you sure you want to log out of FacultyPay?", style: TextStyle(color: Colors.white.withValues(alpha: 0.7))),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: Text("Cancel", style: TextStyle(color: Colors.white.withValues(alpha: 0.5))),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: Text("Log Out", style: TextStyle(color: primaryRed, fontWeight: FontWeight.bold)),
-          ),
-        ],
-      ),
-    );
-
-    if (confirm == true) {
-      await FirebaseAuth.instance.signOut();
-      if (mounted) {
-        // Replace '/login' with the actual route name of your Login Screen
-        Navigator.of(context).pushNamedAndRemoveUntil('/login', (route) => false);
-      }
-    }
-  }
+  // Mock read-only data
+  final String email = "sarah.smith@university.edu";
+  final String department = "Physics";
+  final double hourlyRate = 150.0;
 
   @override
   Widget build(BuildContext context) {
@@ -192,9 +60,7 @@ class _FacultyProfilePageState extends State<FacultyProfilePage> {
                       color: Color(0xFF242832),
                       borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
                     ),
-                    child: isLoading
-                        ? Center(child: CircularProgressIndicator(color: primaryRed))
-                        : SingleChildScrollView(
+                    child: SingleChildScrollView(
                       physics: const BouncingScrollPhysics(),
                       padding: const EdgeInsets.only(top: 32, left: 20, right: 20, bottom: 120),
                       child: Column(
@@ -236,16 +102,14 @@ class _FacultyProfilePageState extends State<FacultyProfilePage> {
                             children: [
                               Expanded(child: _buildReadOnlyField("Department", department.toUpperCase(), Icons.business)),
                               const SizedBox(width: 16),
-                              Expanded(child: _buildReadOnlyField("Hourly Rate", "₹${hourlyRate.toStringAsFixed(2)} / hr", Icons.payments_outlined)),
+                              Expanded(child: _buildReadOnlyField("Hourly Rate", "\$${hourlyRate.toStringAsFixed(2)} / hr", Icons.payments_outlined)),
                             ],
                           ),
 
                           const SizedBox(height: 40),
 
-                          // Buttons Area
+                          // Save Button
                           _buildSaveButton(),
-                          const SizedBox(height: 16),
-                          _buildLogoutButton(), // <-- New Logout Button added here
                         ],
                       ),
                     ),
@@ -255,7 +119,11 @@ class _FacultyProfilePageState extends State<FacultyProfilePage> {
             ),
           ),
 
-          // Floating Bottom Navigation handled by wrapper
+          // 3. Floating Bottom Navigation
+          Positioned(
+            bottom: 30, left: 20, right: 20,
+            child: _buildFloatingBottomNav(),
+          ),
         ],
       ),
     );
@@ -265,24 +133,10 @@ class _FacultyProfilePageState extends State<FacultyProfilePage> {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Expanded(child: Text("My Profile", style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold, color: Colors.white, letterSpacing: -0.5), overflow: TextOverflow.ellipsis)),
+        const Text("My Profile", style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold, color: Colors.white, letterSpacing: -0.5)),
         Row(
-          mainAxisSize: MainAxisSize.min,
           children: [
-            // ---> CLICKABLE NOTIFICATION BUTTON <---
-            GestureDetector(
-              onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (context) => const NotificationsPage()),
-                );
-              },
-              child: Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(color: primaryRed, shape: BoxShape.circle),
-                child: const Icon(Icons.notifications, color: Colors.white, size: 20),
-              ),
-            ),
+            Container(padding: const EdgeInsets.all(8), decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.15), shape: BoxShape.circle), child: const Icon(Icons.notifications, color: Colors.white, size: 20)),
           ],
         )
       ],
@@ -305,17 +159,14 @@ class _FacultyProfilePageState extends State<FacultyProfilePage> {
                 child: CircleAvatar(
                   radius: 55,
                   backgroundColor: const Color(0xFF3B4154),
-                  backgroundImage: avatarBase64 != null && avatarBase64!.isNotEmpty
-                      ? MemoryImage(base64Decode(avatarBase64!))
-                      : null,
-                  child: (avatarBase64 == null || avatarBase64!.isEmpty)
-                      ? const Icon(Icons.person, size: 55, color: Colors.white)
-                      : null,
+                  child: const Icon(Icons.person, size: 55, color: Colors.white),
                 ),
               ),
-              // Camera Edit Button (Wired to Firebase)
+              // Camera Edit Button
               GestureDetector(
-                onTap: _pickImage,
+                onTap: () {
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: const Text("Image picker will open here"), backgroundColor: primaryRed));
+                },
                 child: Container(
                   padding: const EdgeInsets.all(10),
                   decoration: BoxDecoration(
@@ -388,41 +239,66 @@ class _FacultyProfilePageState extends State<FacultyProfilePage> {
 
   Widget _buildSaveButton() {
     return GestureDetector(
-      onTap: isSaving ? null : _updateProfile,
+      onTap: () {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: const Text("Profile changes saved!"), backgroundColor: successGreen));
+      },
       child: Container(
         width: double.infinity,
         padding: const EdgeInsets.symmetric(vertical: 18),
         decoration: BoxDecoration(
-          color: isSaving ? primaryRed.withValues(alpha: 0.5) : primaryRed,
+          color: primaryRed,
           borderRadius: BorderRadius.circular(20),
           boxShadow: [BoxShadow(color: primaryRed.withValues(alpha: 0.3), blurRadius: 15, offset: const Offset(0, 5))],
         ),
-        child: Center(
-          child: isSaving
-              ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-              : const Text("Save Changes", style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold, letterSpacing: 1)),
+        child: const Center(
+          child: Text("Save Changes", style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold, letterSpacing: 1)),
         ),
       ),
     );
   }
 
-  Widget _buildLogoutButton() {
-    return GestureDetector(
-      onTap: _logout,
-      child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.symmetric(vertical: 18),
-        decoration: BoxDecoration(
-          color: Colors.transparent, // Transparent background
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: primaryRed.withValues(alpha: 0.5), width: 1.5), // Subtle red outline
+  Widget _buildFloatingBottomNav() {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(40),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 40, sigmaY: 40),
+        child: Container(
+          height: 70,
+          decoration: BoxDecoration(
+            gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [Colors.white.withValues(alpha: 0.15), Colors.white.withValues(alpha: 0.05)]),
+            borderRadius: BorderRadius.circular(40),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.2)),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            children: [
+              _buildNavItem(Icons.home, "HOME", 0),
+              _buildNavItem(Icons.edit_document, "LOG", 1),
+              _buildNavItem(Icons.account_balance_wallet, "PAY", 2),
+              _buildNavItem(Icons.more_horiz, "MORE", 3), // Active Tab
+            ],
+          ),
         ),
-        child: Row(
+      ),
+    );
+  }
+
+  Widget _buildNavItem(IconData icon, String label, int index) {
+    bool isActive = _currentNavIndex == index;
+    final color = isActive ? primaryRed : Colors.white.withValues(alpha: 0.4);
+    return GestureDetector(
+      onTap: () => setState(() => _currentNavIndex = index),
+      child: Container(
+        color: Colors.transparent,
+        width: 60,
+        child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.logout, color: primaryRed, size: 20),
-            const SizedBox(width: 8),
-            Text("Log Out", style: TextStyle(color: primaryRed, fontSize: 16, fontWeight: FontWeight.bold, letterSpacing: 1)),
+            Icon(icon, color: color, size: 24),
+            const SizedBox(height: 4),
+            Text(label, style: TextStyle(color: color, fontSize: 9, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
+            if (isActive)
+              Container(margin: const EdgeInsets.only(top: 4), height: 3, width: 20, decoration: BoxDecoration(color: primaryRed, borderRadius: BorderRadius.circular(2)))
           ],
         ),
       ),

@@ -18,6 +18,7 @@ import 'pages/faculty/faculty_profile_page.dart';
 import 'ui_tests/payments_mobile_ui.dart';
 import 'ui_tests/faculty_dashboard.dart';
 import 'ui_tests/add_attendance_page.dart';
+import 'ui_tests/faculty_profile_page.dart';
 
 import 'services/auth_gate.dart';
 
@@ -96,8 +97,10 @@ class MyApp extends StatelessWidget {
           ),
 
           // home: const PaymentsMobileUI(),
-          home: const AddAttendancePageUI(),
+          // home: const AddAttendancePageUI(),
+          // home: const FacultyProfilePageUI(),
           // home: const FacultyDashboardUI(),
+          home: const AuthGate(),
 
           routes: {
             // --- ADMIN ROUTES ---
@@ -110,10 +113,10 @@ class MyApp extends StatelessWidget {
             '/admin/profile': (context) => const AdminProfilePage(), // ✅ NEW: Admin Route
 
             // --- FACULTY ROUTES ---
-            '/faculty/dashboard': (context) => const FacultyDashboard(),
-            '/faculty/add-attendance': (context) => const FacultyAddAttendancePage(),
-            '/faculty/salary-history': (context) => const FacultySalaryHistoryPage(),
-            '/faculty/profile': (context) => const FacultyProfilePage(),
+            '/faculty/dashboard': (context) => const FacultyDashboard(initialIndex: 0),
+            '/faculty/add-attendance': (context) => const FacultyDashboard(initialIndex: 1),
+            '/faculty/salary-history': (context) => const FacultyDashboard(initialIndex: 2),
+            '/faculty/profile': (context) => const FacultyDashboard(initialIndex: 3),
           },
         );
       },

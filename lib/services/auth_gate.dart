@@ -97,7 +97,7 @@ class RoleRedirect extends StatelessWidget {
         if (role == 'admin') {
           return const AdminDashboard();
         } else {
-          return const FacultyDashboard();
+          return const FacultyDashboard(initialIndex: 0);
         }
       },
     );
