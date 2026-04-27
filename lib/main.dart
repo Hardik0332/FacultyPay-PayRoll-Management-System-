@@ -9,7 +9,8 @@ import 'pages/admin/view_faculty_page.dart';
 import 'pages/admin/admin_view_attendance_page.dart';
 import 'pages/admin/calculate_salary_screen.dart';
 import 'pages/admin/admin_reports_page.dart';
-import 'pages/admin/admin_profile_page.dart'; // ✅ NEW: Admin Profile Import
+import 'pages/admin/admin_profile_page.dart';
+import 'pages/admin/admin_base_wrapper.dart';
 
 import 'pages/faculty/faculty_dashboard.dart';
 import 'pages/faculty/add_attendance_page.dart';
@@ -104,13 +105,13 @@ class MyApp extends StatelessWidget {
 
           routes: {
             // --- ADMIN ROUTES ---
-            '/admin/dashboard': (context) => const AdminDashboard(),
-            '/admin/add-faculty': (context) => const AddFacultyPage(),
-            '/admin/view-faculty': (context) => const ViewFacultyPage(),
-            '/admin/view-attendance': (context) => const AdminViewAttendancePage(),
-            '/admin/calculate-salary': (context) => const CalculateSalaryScreen(),
-            '/admin/reports': (context) => const AdminReportsPage(),
-            '/admin/profile': (context) => const AdminProfilePage(), // ✅ NEW: Admin Route
+            '/admin/dashboard': (context) => const AdminBaseWrapper(initialIndex: 0),
+            '/admin/view-attendance': (context) => const AdminBaseWrapper(initialIndex: 1),
+            '/admin/calculate-salary': (context) => const AdminBaseWrapper(initialIndex: 2),
+            '/admin/view-faculty': (context) => const AdminBaseWrapper(initialIndex: 3),
+            '/admin/add-faculty': (context) => const AdminBaseWrapper(initialIndex: 4),
+            '/admin/reports': (context) => const AdminBaseWrapper(initialIndex: 5),
+            '/admin/profile': (context) => const AdminBaseWrapper(initialIndex: 6),
 
             // --- FACULTY ROUTES ---
             '/faculty/dashboard': (context) => const FacultyDashboard(initialIndex: 0),

@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../pages/login_page.dart';
-import '../pages/admin/admin_dashboard.dart';
+import '../pages/admin/admin_base_wrapper.dart'; // ✅ Changed import to the Wrapper
 import '../pages/faculty/faculty_dashboard.dart';
 
 class AuthGate extends StatelessWidget {
@@ -95,7 +95,8 @@ class RoleRedirect extends StatelessWidget {
         final String role = data?['role'] ?? 'faculty';
 
         if (role == 'admin') {
-          return const AdminDashboard();
+          // ✅ FIXED: Load the Wrapper instead of the raw dashboard!
+          return const AdminBaseWrapper(initialIndex: 0);
         } else {
           return const FacultyDashboard(initialIndex: 0);
         }

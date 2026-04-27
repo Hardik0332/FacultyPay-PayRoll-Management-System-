@@ -1,7 +1,11 @@
+import 'dart:ui';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart';
-import '../../widgets/app_sidebars.dart';
+
+// Make sure you have this import pointing to your actual service file!
 import '../../services/report_service.dart';
 
 class AdminReportsPage extends StatefulWidget {
@@ -12,6 +16,11 @@ class AdminReportsPage extends StatefulWidget {
 }
 
 class _AdminReportsPageState extends State<AdminReportsPage> {
+  final Color primaryRed = const Color(0xFFE05B5C);
+  final Color successGreen = const Color(0xFF4ADE80);
+  final Color pendingOrange = const Color(0xFFFBBF24);
+  final Color verifiedBlue = const Color(0xFF60A5FA);
+
   String? selectedFacultyId; // Null means "All Faculty"
   Map<String, String> facultyNames = {};
   Map<String, double> facultyRates = {};
@@ -57,10 +66,12 @@ class _AdminReportsPageState extends State<AdminReportsPage> {
           : (doc['hourlyRate'] as double? ?? 0.0);
     }
 
-    setState(() {
-      facultyNames = tempNames;
-      facultyRates = tempRates;
-    });
+    if (mounted) {
+      setState(() {
+        facultyNames = tempNames;
+        facultyRates = tempRates;
+      });
+    }
   }
 
   Future<void> _pickMonth() async {
@@ -70,6 +81,19 @@ class _AdminReportsPageState extends State<AdminReportsPage> {
       firstDate: DateTime(2023),
       lastDate: DateTime.now(),
       helpText: "Select any day in the desired month",
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: ColorScheme.dark(
+              primary: primaryRed,
+              onPrimary: Colors.white,
+              surface: const Color(0xFF282C37),
+              onSurface: Colors.white,
+            ),
+          ),
+          child: child!,
+        );
+      },
     );
     if (picked != null) {
       setState(() => _selectedMonth = picked);
@@ -78,183 +102,310 @@ class _AdminReportsPageState extends State<AdminReportsPage> {
 
   @override
   Widget build(BuildContext context) {
-    final isDesktop = MediaQuery.of(context).size.width > 800;
-    final theme = Theme.of(context);
+    return Stack(
+      children: [
+        // 1. Background Gradient
+        Container(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [Color(0xFF3B4154), Color(0xFF1E212A)],
+            ),
+          ),
+        ),
 
-    return Scaffold(
-      appBar: isDesktop
-          ? null
-          : AppBar(
-        title: const Text("Reports"),
-        elevation: 0,
-      ),
-      drawer: isDesktop
-          ? null
-          : const Drawer(
-        child: AdminSidebar(activeRoute: '/admin/reports'),
-      ),
-      body: Row(
-        children: [
-          if (isDesktop) const AdminSidebar(activeRoute: '/admin/reports'),
-          Expanded(
-            // ✅ ONLY ADDED REFRESH INDICATOR HERE
-            child: RefreshIndicator(
-              color: theme.primaryColor,
-              backgroundColor: theme.cardColor,
-              onRefresh: () async {
-                await _fetchFacultyData();
-                setState(() {});
-              },
-              child: SingleChildScrollView(
-                // ✅ ADDED PHYSICS FOR SCROLLING
-                physics: const AlwaysScrollableScrollPhysics(),
-                padding: EdgeInsets.all(isDesktop ? 32 : 16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text("Attendance Reports", style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 32),
+        // 2. Main Content
+        SafeArea(
+          bottom: false,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
+                child: _buildHeader(),
+              ),
 
-                    // FILTER CARD
-                    Container(
-                      padding: const EdgeInsets.all(24),
-                      decoration: BoxDecoration(
-                        color: theme.cardColor,
-                        borderRadius: BorderRadius.circular(12),
-                        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10)],
-                      ),
+              // Main Form Container
+              Expanded(
+                child: Container(
+                  width: double.infinity,
+                  decoration: const BoxDecoration(
+                    color: Color(0xFF242832),
+                    borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
+                  ),
+                  child: RefreshIndicator(
+                    color: primaryRed,
+                    backgroundColor: const Color(0xFF2A2E39),
+                    onRefresh: _fetchFacultyData,
+                    child: SingleChildScrollView(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      padding: const EdgeInsets.only(top: 32, left: 20, right: 20, bottom: 120),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Text("Generate PDF Report", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                          const Text("Generate Reports", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white)),
+                          const SizedBox(height: 4),
+                          Text("Export attendance and payment liability as PDF.", style: TextStyle(color: Colors.white.withValues(alpha: 0.6), fontSize: 13)),
                           const SizedBox(height: 24),
 
-                          // ROW 1: FACULTY & PERIOD SELECTION
-                          if (isDesktop)
-                            Row(
-                              children: [
-                                Expanded(child: _buildFacultyDropdown(theme)),
-                                const SizedBox(width: 24),
-                                Expanded(child: _buildPeriodDropdown(theme)),
-                              ],
-                            )
-                          else
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: [
-                                _buildFacultyDropdown(theme),
-                                const SizedBox(height: 16),
-                                _buildPeriodDropdown(theme),
-                              ],
-                            ),
-
-                          const SizedBox(height: 16),
-
-                          // ROW 2: DYNAMIC FILTERS & PRINT BUTTON
-                          if (isDesktop)
-                            Row(
-                              children: [
-                                Expanded(child: _buildDynamicDateFilter(theme)),
-                                const SizedBox(width: 24),
-                                _buildPrintButton(),
-                              ],
-                            )
-                          else
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: [
-                                _buildDynamicDateFilter(theme),
-                                const SizedBox(height: 24),
-                                _buildPrintButton(),
-                              ],
-                            ),
+                          _buildFilterCard(),
                         ],
                       ),
                     ),
-                  ],
+                  ),
                 ),
               ),
-            ),
+            ],
           ),
+        ),
+      ],
+    );
+  }
+
+  // --- UI COMPONENTS ---
+
+  Widget _buildHeader() {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text("Admin Action", style: TextStyle(color: primaryRed, fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 1.5)),
+              const SizedBox(height: 2),
+              const Text("Reports", style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold, color: Colors.white, letterSpacing: -0.5), overflow: TextOverflow.ellipsis),
+            ],
+          ),
+        ),
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // ✅ FIXED: Added SearchDelegate to instantly pick a faculty for the dropdown
+            GestureDetector(
+              onTap: () async {
+                final String? selectedUid = await showSearch<String>(
+                  context: context,
+                  delegate: ReportsSearchDelegate(),
+                );
+                if (selectedUid != null && selectedUid.isNotEmpty) {
+                  setState(() {
+                    selectedFacultyId = selectedUid; // Updates the dropdown!
+                  });
+                }
+              },
+              child: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.15), shape: BoxShape.circle),
+                  child: const Icon(Icons.search, color: Colors.white, size: 20)
+              ),
+            ),
+            const SizedBox(width: 12),
+            StreamBuilder<DocumentSnapshot>(
+                stream: FirebaseFirestore.instance.collection('users').doc(FirebaseAuth.instance.currentUser?.uid).snapshots(),
+                builder: (context, snapshot) {
+                  String? avatarBase64;
+                  if (snapshot.hasData && snapshot.data!.exists) {
+                    final data = snapshot.data!.data() as Map<String, dynamic>?;
+                    avatarBase64 = data?['avatarBase64'];
+                  }
+                  return GestureDetector(
+                    onTap: () => Navigator.pushReplacementNamed(context, '/admin/profile'),
+                    child: CircleAvatar(
+                      radius: 18,
+                      backgroundColor: Colors.white.withValues(alpha: 0.15),
+                      backgroundImage: avatarBase64 != null && avatarBase64.isNotEmpty ? MemoryImage(base64Decode(avatarBase64)) : null,
+                      child: (avatarBase64 == null || avatarBase64.isEmpty) ? const Icon(Icons.person, color: Colors.white, size: 20) : null,
+                    ),
+                  );
+                }
+            ),
+          ],
+        )
+      ],
+    );
+  }
+
+  Widget _buildFilterCard() {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: const Color(0xFF2A2E39),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildFacultyDropdown(),
+          const SizedBox(height: 20),
+          _buildPeriodDropdown(),
+          const SizedBox(height: 20),
+          _buildDynamicDateFilter(),
+          const SizedBox(height: 32),
+          _buildPrintButton(),
         ],
       ),
     );
   }
 
-  // --- UI HELPERS ---
-
-  Widget _buildFacultyDropdown(ThemeData theme) {
-    return DropdownButtonFormField<String>(
-      isExpanded: true,
-      dropdownColor: theme.cardColor,
-      decoration: const InputDecoration(labelText: "Select Faculty", border: OutlineInputBorder(), contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 12)),
-      value: selectedFacultyId,
-      items: [
-        const DropdownMenuItem(value: null, child: Text("All Faculty (Master Report)", overflow: TextOverflow.ellipsis)),
-        ...facultyNames.entries.map((e) => DropdownMenuItem(value: e.key, child: Text(e.value, overflow: TextOverflow.ellipsis))),
-      ],
-      onChanged: (val) => setState(() => selectedFacultyId = val),
-    );
-  }
-
-  Widget _buildPeriodDropdown(ThemeData theme) {
-    return DropdownButtonFormField<String>(
-      isExpanded: true,
-      dropdownColor: theme.cardColor,
-      decoration: const InputDecoration(labelText: "Report Period", border: OutlineInputBorder(), contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 12)),
-      value: _reportPeriod,
-      items: const [
-        DropdownMenuItem(value: 'All Time', child: Text("All Time")),
-        DropdownMenuItem(value: 'Monthly', child: Text("Monthly")),
-        DropdownMenuItem(value: 'Financial Year', child: Text("Financial Year")),
-      ],
-      onChanged: (val) => setState(() => _reportPeriod = val ?? 'All Time'),
-    );
-  }
-
-  Widget _buildDynamicDateFilter(ThemeData theme) {
-    if (_reportPeriod == 'Monthly') {
-      return InkWell(
-        onTap: _pickMonth,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 15),
-          decoration: BoxDecoration(
-              border: Border.all(color: Colors.grey.withOpacity(0.4)),
-              borderRadius: BorderRadius.circular(4)
+  Widget _buildFacultyDropdown() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text("Target Faculty", style: TextStyle(color: Colors.white.withValues(alpha: 0.6), fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
+        const SizedBox(height: 8),
+        DropdownButtonFormField<String>(
+          value: selectedFacultyId,
+          isExpanded: true,
+          dropdownColor: const Color(0xFF2A2E39),
+          style: const TextStyle(color: Colors.white, fontSize: 15),
+          icon: Icon(Icons.arrow_drop_down, color: Colors.white.withValues(alpha: 0.5)),
+          decoration: InputDecoration(
+            hintText: "Select Faculty",
+            hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.2)),
+            prefixIcon: Icon(Icons.people_outline, color: Colors.white.withValues(alpha: 0.5), size: 20),
+            filled: true,
+            fillColor: Colors.white.withValues(alpha: 0.03),
+            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+            enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.05))),
+            focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide(color: primaryRed, width: 1.5)),
           ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text("Month: ${DateFormat('MMMM yyyy').format(_selectedMonth)}", style: const TextStyle(fontSize: 16)),
-              const Icon(Icons.calendar_month, color: Colors.grey),
-            ],
-          ),
+          items: [
+            const DropdownMenuItem(value: null, child: Text("All Faculty (Master Report)", overflow: TextOverflow.ellipsis)),
+            ...facultyNames.entries.map((e) => DropdownMenuItem(value: e.key, child: Text(e.value, overflow: TextOverflow.ellipsis))),
+          ],
+          onChanged: (val) => setState(() => selectedFacultyId = val),
         ),
+      ],
+    );
+  }
+
+  Widget _buildPeriodDropdown() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text("Time Period", style: TextStyle(color: Colors.white.withValues(alpha: 0.6), fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
+        const SizedBox(height: 8),
+        DropdownButtonFormField<String>(
+          value: _reportPeriod,
+          isExpanded: true,
+          dropdownColor: const Color(0xFF2A2E39),
+          style: const TextStyle(color: Colors.white, fontSize: 15),
+          icon: Icon(Icons.arrow_drop_down, color: Colors.white.withValues(alpha: 0.5)),
+          decoration: InputDecoration(
+            hintText: "Select Period",
+            hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.2)),
+            prefixIcon: Icon(Icons.date_range, color: Colors.white.withValues(alpha: 0.5), size: 20),
+            filled: true,
+            fillColor: Colors.white.withValues(alpha: 0.03),
+            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+            enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.05))),
+            focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide(color: primaryRed, width: 1.5)),
+          ),
+          items: const [
+            DropdownMenuItem(value: 'All Time', child: Text("All Time")),
+            DropdownMenuItem(value: 'Monthly', child: Text("Monthly")),
+            DropdownMenuItem(value: 'Financial Year', child: Text("Financial Year")),
+          ],
+          onChanged: (val) => setState(() => _reportPeriod = val ?? 'All Time'),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildDynamicDateFilter() {
+    if (_reportPeriod == 'Monthly') {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text("Select Month", style: TextStyle(color: Colors.white.withValues(alpha: 0.6), fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
+          const SizedBox(height: 8),
+          GestureDetector(
+            onTap: _pickMonth,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.03),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Expanded(
+                    child: Row(
+                      children: [
+                        Icon(Icons.calendar_month, color: Colors.white.withValues(alpha: 0.5), size: 20),
+                        const SizedBox(width: 12),
+                        Expanded(child: Text(DateFormat('MMMM yyyy').format(_selectedMonth), style: const TextStyle(color: Colors.white, fontSize: 15), overflow: TextOverflow.ellipsis)),
+                      ],
+                    ),
+                  ),
+                  Icon(Icons.edit, color: Colors.white.withValues(alpha: 0.3), size: 18),
+                ],
+              ),
+            ),
+          ),
+        ],
       );
     } else if (_reportPeriod == 'Financial Year') {
-      return DropdownButtonFormField<String>(
-        dropdownColor: theme.cardColor,
-        decoration: const InputDecoration(labelText: "Select Financial Year", border: OutlineInputBorder(), contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 12)),
-        value: _selectedFY,
-        items: _getFinancialYearOptions().map((fy) => DropdownMenuItem(value: fy, child: Text("FY $fy"))).toList(),
-        onChanged: (val) => setState(() => _selectedFY = val!),
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text("Select Financial Year", style: TextStyle(color: Colors.white.withValues(alpha: 0.6), fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
+          const SizedBox(height: 8),
+          DropdownButtonFormField<String>(
+            value: _selectedFY,
+            dropdownColor: const Color(0xFF2A2E39),
+            style: const TextStyle(color: Colors.white, fontSize: 15),
+            icon: Icon(Icons.arrow_drop_down, color: Colors.white.withValues(alpha: 0.5)),
+            decoration: InputDecoration(
+              prefixIcon: Icon(Icons.account_balance, color: Colors.white.withValues(alpha: 0.5), size: 20),
+              filled: true,
+              fillColor: Colors.white.withValues(alpha: 0.03),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+              enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.05))),
+              focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide(color: primaryRed, width: 1.5)),
+            ),
+            items: _getFinancialYearOptions().map((fy) => DropdownMenuItem(value: fy, child: Text("FY $fy"))).toList(),
+            onChanged: (val) => setState(() => _selectedFY = val!),
+          ),
+        ],
       );
     }
-    return const SizedBox();
+    return const SizedBox.shrink();
   }
 
   Widget _buildPrintButton() {
-    return ElevatedButton.icon(
-      style: ElevatedButton.styleFrom(
-        backgroundColor: const Color(0xff45a182),
-        padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 20),
+    return GestureDetector(
+      onTap: isLoading ? null : _generateReport,
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(vertical: 18),
+        decoration: BoxDecoration(
+          color: isLoading ? successGreen.withValues(alpha: 0.5) : successGreen,
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [BoxShadow(color: successGreen.withValues(alpha: 0.2), blurRadius: 15, offset: const Offset(0, 5))],
+        ),
+        child: Center(
+          child: isLoading
+              ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(color: Colors.black, strokeWidth: 2))
+              : Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: const [
+              Icon(Icons.print, color: Colors.black, size: 20),
+              SizedBox(width: 8),
+              Text("Generate PDF Report", style: TextStyle(color: Colors.black, fontSize: 16, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
+            ],
+          ),
+        ),
       ),
-      icon: isLoading ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white)) : const Icon(Icons.print),
-      label: const Text("Generate PDF"),
-      onPressed: isLoading ? null : _generateReport,
     );
   }
 
+  // --- REPORT GENERATION LOGIC ---
   Future<void> _generateReport() async {
     setState(() => isLoading = true);
 
@@ -325,5 +476,103 @@ class _AdminReportsPageState extends State<AdminReportsPage> {
     } finally {
       if(mounted) setState(() => isLoading = false);
     }
+  }
+}
+
+// ✅ NEW: Custom Search Delegate to find Faculty and select them in the Dropdown
+class ReportsSearchDelegate extends SearchDelegate<String> {
+  @override
+  ThemeData appBarTheme(BuildContext context) {
+    return ThemeData(
+      appBarTheme: const AppBarTheme(
+        backgroundColor: Color(0xFF242832),
+        elevation: 0,
+        iconTheme: IconThemeData(color: Colors.white),
+      ),
+      scaffoldBackgroundColor: const Color(0xFF282C37),
+      textTheme: const TextTheme(
+        titleLarge: TextStyle(color: Colors.white, fontSize: 16),
+      ),
+      inputDecorationTheme: InputDecorationTheme(
+        hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.5)),
+        border: InputBorder.none,
+      ),
+    );
+  }
+
+  @override
+  List<Widget>? buildActions(BuildContext context) {
+    return [
+      if (query.isNotEmpty)
+        IconButton(
+          icon: const Icon(Icons.clear, color: Colors.white),
+          onPressed: () => query = '',
+        )
+    ];
+  }
+
+  @override
+  Widget? buildLeading(BuildContext context) {
+    return IconButton(
+      icon: const Icon(Icons.arrow_back, color: Colors.white),
+      onPressed: () => close(context, ''),
+    );
+  }
+
+  @override
+  Widget buildResults(BuildContext context) => _buildSearchResults();
+
+  @override
+  Widget buildSuggestions(BuildContext context) => _buildSearchResults();
+
+  Widget _buildSearchResults() {
+    if (query.isEmpty) {
+      return Center(
+        child: Text("Search faculty by name for report...", style: TextStyle(color: Colors.white.withValues(alpha: 0.5))),
+      );
+    }
+
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance.collection('users').where('role', isEqualTo: 'faculty').snapshots(),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) {
+          return const Center(child: CircularProgressIndicator(color: Color(0xFFE05B5C)));
+        }
+
+        final docs = snapshot.data!.docs.where((doc) {
+          final data = doc.data() as Map<String, dynamic>;
+          final name = (data['name'] ?? '').toString().toLowerCase();
+          final q = query.toLowerCase();
+          return name.contains(q);
+        }).toList();
+
+        if (docs.isEmpty) {
+          return Center(
+            child: Text("No faculty found matching '$query'.", style: TextStyle(color: Colors.white.withValues(alpha: 0.5))),
+          );
+        }
+
+        return ListView.builder(
+          itemCount: docs.length,
+          itemBuilder: (context, index) {
+            final data = docs[index].data() as Map<String, dynamic>;
+            final name = data['name'] ?? 'Unknown';
+            final avatarBase64 = data['avatarBase64'];
+
+            return ListTile(
+              leading: CircleAvatar(
+                backgroundColor: Colors.white.withValues(alpha: 0.15),
+                backgroundImage: avatarBase64 != null && avatarBase64.isNotEmpty ? MemoryImage(base64Decode(avatarBase64)) : null,
+                child: (avatarBase64 == null || avatarBase64.isEmpty) ? const Icon(Icons.person, color: Colors.white) : null,
+              ),
+              title: Text(name, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+              onTap: () {
+                close(context, data['uid'] ?? docs[index].id);
+              },
+            );
+          },
+        );
+      },
+    );
   }
 }

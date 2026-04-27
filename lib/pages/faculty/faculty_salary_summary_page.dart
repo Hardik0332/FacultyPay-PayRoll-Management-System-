@@ -5,6 +5,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart';
 import 'notifications_page.dart';
+import '../../widgets/notification_badge.dart';
 
 // Make sure you have these imports pointing to your actual service files!
 import '../../services/report_service.dart';
@@ -222,19 +223,7 @@ class _FacultySalaryHistoryPageState extends State<FacultySalaryHistoryPage> {
             ),
             const SizedBox(width: 12),
             // ---> CLICKABLE NOTIFICATION BUTTON <---
-            GestureDetector(
-              onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (context) => const NotificationsPage()),
-                );
-              },
-              child: Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(color: primaryRed, shape: BoxShape.circle),
-                child: const Icon(Icons.notifications, color: Colors.white, size: 20),
-              ),
-            ),
+            const NotificationBadge(),
             const SizedBox(width: 12),
 
             // DECODED AVATAR WIDGET ADDED HERE

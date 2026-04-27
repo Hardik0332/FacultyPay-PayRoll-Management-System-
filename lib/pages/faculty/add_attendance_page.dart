@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'notifications_page.dart';
+import '../../widgets/notification_badge.dart';
 
 class AddAttendancePage extends StatefulWidget {
   const AddAttendancePage({super.key});
@@ -256,19 +257,7 @@ class _AddAttendancePageState extends State<AddAttendancePage> {
           mainAxisSize: MainAxisSize.min,
           children: [
             // ---> CLICKABLE NOTIFICATION BUTTON <---
-            GestureDetector(
-              onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (context) => const NotificationsPage()),
-                );
-              },
-              child: Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(color: primaryRed, shape: BoxShape.circle),
-                child: const Icon(Icons.notifications, color: Colors.white, size: 20),
-              ),
-            ),
+            const NotificationBadge(),
             const SizedBox(width: 12),
             // UPDATED: Added StreamBuilder to fetch avatar
             StreamBuilder<DocumentSnapshot>(

@@ -1,6 +1,9 @@
 import 'dart:ui';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 
 class AdminDashboard extends StatefulWidget {
   const AdminDashboard({super.key});
@@ -15,140 +18,72 @@ class _AdminDashboardState extends State<AdminDashboard> {
   final Color pendingOrange = const Color(0xFFFBBF24);
   final Color verifiedBlue = const Color(0xFF60A5FA);
 
-  int _currentNavIndex = 0; // Starts on DASHBOARD
-
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFF282C37),
-      body: Stack(
-        children: [
-          // 1. Background Gradient
-          Container(
-            decoration: const BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [Color(0xFF3B4154), Color(0xFF1E212A)],
-              ),
+    return Stack( // ✅ ADDED: Stack to hold the gradient and content
+      children: [
+        // ✅ ADDED: Restored the beautiful Background Gradient
+        Container(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [Color(0xFF3B4154), Color(0xFF1E212A)],
             ),
           ),
+        ),
 
-          // 2. Fixed Background Content (Header, Master Card & Actions)
-          SafeArea(
-            bottom: false,
-            child: RefreshIndicator(
-              color: primaryRed,
-              backgroundColor: const Color(0xFF242832),
-              onRefresh: () async {
-                await Future.delayed(const Duration(milliseconds: 1200));
-              },
-              child: SingleChildScrollView(
-                physics: const AlwaysScrollableScrollPhysics(),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
-                      child: _buildHeader(),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 20),
-                      child: _buildMasterCard(),
-                    ),
-                    const SizedBox(height: 24),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 20),
-                      child: _buildQuickActions(context),
-                    ),
-                    // Give space so the bottom sheet can rest below
-                    const SizedBox(height: 100),
-                  ],
-                ),
-              ),
-            ),
-          ),
-
-          // 3. THE DRAGGABLE BOTTOM SHEET (Pending Approvals from Firestore)
-          DraggableScrollableSheet(
-            initialChildSize: 0.48,
-            minChildSize: 0.48,
-            maxChildSize: 0.88,
-            builder: (BuildContext context, ScrollController scrollController) {
-              return Container(
-                decoration: BoxDecoration(
-                  color: const Color(0xFF242832),
-                  borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
-                  boxShadow: [
-                    BoxShadow(color: Colors.black.withValues(alpha: 0.3), blurRadius: 20, offset: const Offset(0, -5))
-                  ],
-                ),
-                child: ListView(
-                  controller: scrollController,
-                  padding: const EdgeInsets.only(bottom: 120), // Padding for the floating nav bar
-                  physics: const ClampingScrollPhysics(),
-                  children: [
-                    // --- DRAG HANDLE ---
-                    Center(
-                      child: Container(
-                        width: 40, height: 4,
-                        margin: const EdgeInsets.only(top: 16, bottom: 20),
-                        decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(2)),
-                      ),
-                    ),
-
-                    // --- PENDING LIST HEADER ---
-                    StreamBuilder<QuerySnapshot>(
-                        stream: FirebaseFirestore.instance.collection('attendance').where('status', isEqualTo: 'Pending').snapshots(),
-                        builder: (context, snapshot) {
-                          int pendingCount = snapshot.hasData ? snapshot.data!.docs.length : 0;
-                          return Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 20),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                const Text("Pending Verifications", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white, letterSpacing: 0.5)),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                  decoration: BoxDecoration(color: primaryRed.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(10)),
-                                  child: Text("$pendingCount Pending", style: TextStyle(color: primaryRed, fontSize: 11, fontWeight: FontWeight.bold)),
-                                )
-                              ],
-                            ),
-                          );
-                        }
-                    ),
-                    const SizedBox(height: 20),
-
-                    // --- ACTUAL PENDING LIST FROM FIREBASE ---
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 20),
-                      child: Stack(
-                        children: [
-                          Positioned(left: 35, top: 30, bottom: 30, child: Container(width: 1.5, color: pendingOrange.withValues(alpha: 0.4))),
-                          _buildPendingFirebaseList(),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              );
+        // Main Scrollable Content
+        SafeArea(
+          bottom: false,
+          child: RefreshIndicator(
+            color: primaryRed,
+            backgroundColor: const Color(0xFF242832),
+            onRefresh: () async {
+              await Future.delayed(const Duration(milliseconds: 1200));
+              setState(() {}); // Force rebuild streams
             },
-          ),
+            child: SingleChildScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              // ✅ ADDED: 120px bottom padding so content isn't hidden behind the floating nav
+              padding: const EdgeInsets.only(bottom: 120),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
+                    child: _buildHeader(context),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 20),
+                    child: _buildMasterCard(),
+                  ),
+                  const SizedBox(height: 32),
 
-          // 4. Floating Bottom Navigation (Crystal Clear Glass)
-          Positioned(
-            bottom: 30, left: 20, right: 20,
-            child: _buildFloatingBottomNav(),
+                  // Quick Actions Title
+                  const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 20),
+                    child: Text("Quick Actions", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white, letterSpacing: 0.5)),
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Vertical List of Actions (Long Rectangles)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 20),
+                    child: _buildQuickActionsList(context),
+                  ),
+                ],
+              ),
+            ),
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 
   // --- UI COMPONENTS & LOGIC MAPPINGS ---
 
-  Widget _buildHeader() {
+  Widget _buildHeader(BuildContext context) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
@@ -165,16 +100,42 @@ class _AdminDashboardState extends State<AdminDashboard> {
         Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Container(padding: const EdgeInsets.all(8), decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.15), shape: BoxShape.circle), child: const Icon(Icons.search, color: Colors.white, size: 20)),
+            GestureDetector(
+              onTap: () {
+                showSearch(context: context, delegate: FacultySearchDelegate());
+              },
+              child: Container(padding: const EdgeInsets.all(8), decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.15), shape: BoxShape.circle), child: const Icon(Icons.search, color: Colors.white, size: 20)),
+            ),
             const SizedBox(width: 12),
-            Container(padding: const EdgeInsets.all(8), decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.15), shape: BoxShape.circle), child: const Icon(Icons.settings, color: Colors.white, size: 20)),
+
+            // LIVE AVATAR
+            StreamBuilder<DocumentSnapshot>(
+                stream: FirebaseFirestore.instance.collection('users').doc(FirebaseAuth.instance.currentUser?.uid).snapshots(),
+                builder: (context, snapshot) {
+                  String? avatarBase64;
+                  if (snapshot.hasData && snapshot.data!.exists) {
+                    final data = snapshot.data!.data() as Map<String, dynamic>?;
+                    avatarBase64 = data?['avatarBase64'];
+                  }
+                  return GestureDetector(
+                    onTap: () {
+                      Navigator.pushReplacementNamed(context, '/admin/profile');
+                    },
+                    child: CircleAvatar(
+                      radius: 18,
+                      backgroundColor: Colors.white.withValues(alpha: 0.15),
+                      backgroundImage: avatarBase64 != null && avatarBase64.isNotEmpty ? MemoryImage(base64Decode(avatarBase64)) : null,
+                      child: (avatarBase64 == null || avatarBase64.isEmpty) ? const Icon(Icons.person, color: Colors.white, size: 20) : null,
+                    ),
+                  );
+                }
+            ),
           ],
         )
       ],
     );
   }
 
-  // This replaces your old _PendingSalaryCard and _StatCard by grouping them beautifully
   Widget _buildMasterCard() {
     return ClipRRect(
       borderRadius: BorderRadius.circular(24),
@@ -194,7 +155,6 @@ class _AdminDashboardState extends State<AdminDashboard> {
               Text("CURRENT MONTH LIABILITY", style: TextStyle(color: Colors.white.withValues(alpha: 0.6), fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 1)),
               const SizedBox(height: 4),
 
-              // 1. Pending Payments Logic (Verified Attendance * Hourly Rate)
               StreamBuilder<QuerySnapshot>(
                 stream: FirebaseFirestore.instance.collection('attendance').where('status', isEqualTo: 'Verified').snapshots(),
                 builder: (context, attendanceSnap) {
@@ -221,7 +181,11 @@ class _AdminDashboardState extends State<AdminDashboard> {
                           }
                         }
                       }
-                      return Text("₹${totalPendingAmount.toStringAsFixed(2)}", style: const TextStyle(fontSize: 32, fontWeight: FontWeight.w800, color: Colors.white));
+                      return FittedBox(
+                        fit: BoxFit.scaleDown,
+                        alignment: Alignment.centerLeft,
+                        child: Text("₹${totalPendingAmount.toStringAsFixed(2)}", style: const TextStyle(fontSize: 32, fontWeight: FontWeight.w800, color: Colors.white)),
+                      );
                     },
                   );
                 },
@@ -231,7 +195,6 @@ class _AdminDashboardState extends State<AdminDashboard> {
 
               Row(
                 children: [
-                  // 2. Active Faculty Count
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -249,8 +212,6 @@ class _AdminDashboardState extends State<AdminDashboard> {
                     ),
                   ),
                   Container(width: 1, height: 30, color: Colors.white.withValues(alpha: 0.2)),
-
-                  // 3. Pending Logs Count
                   Expanded(
                     child: Padding(
                       padding: const EdgeInsets.only(left: 16),
@@ -279,202 +240,188 @@ class _AdminDashboardState extends State<AdminDashboard> {
     );
   }
 
-  // Quick actions directly mapped to your exact Navigator paths
-  Widget _buildQuickActions(BuildContext context) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+  // --- EXTENDED QUICK ACTIONS LIST ---
+  Widget _buildQuickActionsList(BuildContext context) {
+    return Column(
       children: [
-        _buildActionCard(Icons.verified, "Verify\nLogs", verifiedBlue, () {
-          Navigator.pushReplacementNamed(context, '/admin/view-attendance');
-        }),
-        _buildActionCard(Icons.account_balance, "Process\nPayments", successGreen, () {
-          Navigator.pushReplacementNamed(context, '/admin/calculate-salary');
-        }),
-        _buildActionCard(Icons.person_add, "Add\nFaculty", Colors.purpleAccent, () {
-          Navigator.pushReplacementNamed(context, '/admin/add-faculty');
-        }),
-        _buildActionCard(Icons.receipt_long, "Generate\nReports", Colors.orangeAccent, () {
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Reports routing coming soon")));
-        }),
+        _buildActionListTile(
+            Icons.verified, "Verify Logs", "Review and approve faculty attendance", verifiedBlue,
+                () => Navigator.pushReplacementNamed(context, '/admin/view-attendance')
+        ),
+        _buildActionListTile(
+            Icons.account_balance, "Process Payments", "Calculate and clear verified logs", successGreen,
+                () => Navigator.pushReplacementNamed(context, '/admin/calculate-salary')
+        ),
+        _buildActionListTile(
+            Icons.people, "View Faculty", "See all registered faculty members", Colors.cyanAccent,
+                () => Navigator.pushReplacementNamed(context, '/admin/view-faculty')
+        ),
+        _buildActionListTile(
+            Icons.person_add, "Add Faculty", "Onboard new faculty members", Colors.purpleAccent,
+                () => Navigator.pushReplacementNamed(context, '/admin/add-faculty')
+        ),
+        _buildActionListTile(
+            Icons.receipt_long, "Generate Reports", "Export monthly liability and slips", Colors.orangeAccent,
+                () => Navigator.pushReplacementNamed(context, '/admin/reports')
+        ),
+        _buildActionListTile(
+            Icons.person, "My Profile", "Manage your admin account details", Colors.pinkAccent,
+                () => Navigator.pushReplacementNamed(context, '/admin/profile')
+        ),
       ],
     );
   }
 
-  Widget _buildActionCard(IconData icon, String label, Color color, VoidCallback onTap) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Column(
-        children: [
-          Container(
-            width: 55, height: 55,
-            decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.15),
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: color.withValues(alpha: 0.3)),
-            ),
-            child: Icon(icon, color: color, size: 26),
+  Widget _buildActionListTile(IconData icon, String title, String subtitle, Color color, VoidCallback onTap) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: const Color(0xFF2A2E39),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
+            boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.1), blurRadius: 10, offset: const Offset(0, 4))],
           ),
-          const SizedBox(height: 8),
-          Text(label, textAlign: TextAlign.center, style: TextStyle(color: Colors.white.withValues(alpha: 0.8), fontSize: 10, fontWeight: FontWeight.w600, height: 1.2)),
-        ],
+          child: Row(
+            children: [
+              Container(
+                width: 50, height: 50,
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: color.withValues(alpha: 0.3)),
+                ),
+                child: Icon(icon, color: color, size: 24),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(title, style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 4),
+                    Text(subtitle, style: TextStyle(color: Colors.white.withValues(alpha: 0.6), fontSize: 12, fontWeight: FontWeight.w500)),
+                  ],
+                ),
+              ),
+              Icon(Icons.arrow_forward_ios, color: Colors.white.withValues(alpha: 0.3), size: 16),
+            ],
+          ),
+        ),
       ),
     );
   }
 
-  // List of actual pending items from Firebase
-  Widget _buildPendingFirebaseList() {
-    return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance
-          .collection('attendance')
-          .where('status', isEqualTo: 'Pending')
-          .orderBy('submittedAt', descending: true)
-          .snapshots(),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator());
-        }
-        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-          return Padding(
-            padding: const EdgeInsets.only(top: 40),
-            child: Center(child: Text("No pending logs! You are all caught up.", style: TextStyle(color: Colors.white.withValues(alpha: 0.5)))),
-          );
-        }
+}
 
-        return Column(
-          children: snapshot.data!.docs.map((doc) {
-            final data = doc.data() as Map<String, dynamic>;
-            final String uid = data['uid'];
-            final String subject = data['subject'] ?? 'Unknown';
-            final int count = data['lectures'] ?? 0;
-            final DateTime date = (data['date'] as Timestamp).toDate();
-            final String formattedDate = "${date.day}/${date.month}/${date.year}";
+class FacultySearchDelegate extends SearchDelegate<String?> {
+  @override
+  ThemeData appBarTheme(BuildContext context) {
+    return ThemeData(
+      appBarTheme: const AppBarTheme(
+        backgroundColor: Color(0xFF242832),
+        elevation: 0,
+        iconTheme: IconThemeData(color: Colors.white),
+      ),
+      scaffoldBackgroundColor: const Color(0xFF282C37),
+      textTheme: const TextTheme(
+        titleLarge: TextStyle(color: Colors.white, fontSize: 16),
+      ),
+      inputDecorationTheme: InputDecorationTheme(
+        hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.5)),
+        border: InputBorder.none,
+      ),
+    );
+  }
 
-            // To get the name, we use a FutureBuilder for each item
-            return FutureBuilder<DocumentSnapshot>(
-                future: FirebaseFirestore.instance.collection('users').doc(uid).get(),
-                builder: (context, userSnap) {
-                  String name = "Loading...";
-                  if (userSnap.hasData && userSnap.data!.exists) {
-                    name = userSnap.data!['name'] ?? "Unknown Faculty";
-                  }
+  @override
+  List<Widget>? buildActions(BuildContext context) {
+    return [
+      if (query.isNotEmpty)
+        IconButton(
+          icon: const Icon(Icons.clear, color: Colors.white),
+          onPressed: () {
+            query = '';
+          },
+        )
+    ];
+  }
 
-                  return _buildApprovalItem(name, subject, count, formattedDate, doc.id);
-                }
-            );
-          }).toList(),
-        );
+  @override
+  Widget? buildLeading(BuildContext context) {
+    return IconButton(
+      icon: const Icon(Icons.arrow_back, color: Colors.white),
+      onPressed: () {
+        close(context, null);
       },
     );
   }
 
-  Widget _buildApprovalItem(String name, String subject, int count, String date, String docId) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(color: const Color(0xFF2A2E39), borderRadius: BorderRadius.circular(16), border: Border.all(color: Colors.white.withValues(alpha: 0.05))),
-        child: Row(
-          children: [
-            Container(
-                width: 42, height: 42,
-                decoration: const BoxDecoration(color: Color(0xFF4A5060), shape: BoxShape.circle),
-                child: const Icon(Icons.person, color: Colors.white, size: 20)
-            ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(name, style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600)),
-                  const SizedBox(height: 4),
-                  Text("$count Lecture(s) • $subject", style: TextStyle(color: Colors.white.withValues(alpha: 0.6), fontSize: 12, fontWeight: FontWeight.w500)),
-                ],
-              ),
-            ),
+  @override
+  Widget buildResults(BuildContext context) {
+    return _buildSearchResults();
+  }
 
-            // Re-routes to your Verification Page exactly as requested
-            GestureDetector(
+  @override
+  Widget buildSuggestions(BuildContext context) {
+    return _buildSearchResults();
+  }
+
+  Widget _buildSearchResults() {
+    if (query.isEmpty) {
+      return Center(
+        child: Text("Search faculty by name or email...", style: TextStyle(color: Colors.white.withValues(alpha: 0.5))),
+      );
+    }
+
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance.collection('users').where('role', isEqualTo: 'faculty').snapshots(),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) {
+          return const Center(child: CircularProgressIndicator(color: Color(0xFFE05B5C)));
+        }
+
+        final docs = snapshot.data!.docs.where((doc) {
+          final data = doc.data() as Map<String, dynamic>;
+          final name = (data['name'] ?? '').toString().toLowerCase();
+          final email = (data['email'] ?? '').toString().toLowerCase();
+          final q = query.toLowerCase();
+          return name.contains(q) || email.contains(q);
+        }).toList();
+
+        if (docs.isEmpty) {
+          return Center(
+            child: Text("No faculty found matching '$query'.", style: TextStyle(color: Colors.white.withValues(alpha: 0.5))),
+          );
+        }
+
+        return ListView.builder(
+          itemCount: docs.length,
+          itemBuilder: (context, index) {
+            final data = docs[index].data() as Map<String, dynamic>;
+            final name = data['name'] ?? 'Unknown';
+            final email = data['email'] ?? 'No email';
+            final avatarBase64 = data['avatarBase64'];
+
+            return ListTile(
+              leading: CircleAvatar(
+                backgroundColor: Colors.white.withValues(alpha: 0.15),
+                backgroundImage: avatarBase64 != null && avatarBase64.isNotEmpty ? MemoryImage(base64Decode(avatarBase64)) : null,
+                child: (avatarBase64 == null || avatarBase64.isEmpty) ? const Icon(Icons.person, color: Colors.white) : null,
+              ),
+              title: Text(name, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+              subtitle: Text(email, style: TextStyle(color: Colors.white.withValues(alpha: 0.6))),
               onTap: () {
-                Navigator.pushReplacementNamed(context, '/admin/view-attendance');
+                // Return result or navigate
+                close(context, data['uid'] ?? docs[index].id);
               },
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                decoration: BoxDecoration(
-                    color: verifiedBlue.withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: verifiedBlue.withValues(alpha: 0.5))
-                ),
-                child: Row(
-                  children: [
-                    Icon(Icons.check, color: verifiedBlue, size: 16),
-                    const SizedBox(width: 4),
-                    Text("Verify", style: TextStyle(color: verifiedBlue, fontSize: 12, fontWeight: FontWeight.bold)),
-                  ],
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  // --- FLOATING NAV (ADMIN SPECIFIC) ---
-  Widget _buildFloatingBottomNav() {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(40),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
-        child: Container(
-          height: 70,
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  Colors.white.withValues(alpha: 0.03),
-                  Colors.transparent
-                ]
-            ),
-            borderRadius: BorderRadius.circular(40),
-            border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-            children: [
-              _buildNavItem(Icons.dashboard, "DASH", 0),
-              _buildNavItem(Icons.checklist, "APPROVE", 1),
-              _buildNavItem(Icons.group, "FACULTY", 2),
-              _buildNavItem(Icons.payments, "PAYOUTS", 3),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildNavItem(IconData icon, String label, int index) {
-    bool isActive = _currentNavIndex == index;
-    final color = isActive ? primaryRed : Colors.white.withValues(alpha: 0.4);
-    return Expanded(
-      child: GestureDetector(
-        onTap: () {
-          setState(() => _currentNavIndex = index);
-        },
-        child: Container(
-          color: Colors.transparent,
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(icon, color: color, size: 24),
-              const SizedBox(height: 4),
-              Text(label, style: TextStyle(color: color, fontSize: 8, fontWeight: FontWeight.bold, letterSpacing: 0.5), maxLines: 1, overflow: TextOverflow.ellipsis),
-              if (isActive)
-                Container(margin: const EdgeInsets.only(top: 4), height: 3, width: 20, decoration: BoxDecoration(color: primaryRed, borderRadius: BorderRadius.circular(2)))
-            ],
-          ),
-        ),
-      ),
+            );
+          },
+        );
+      },
     );
   }
 }
