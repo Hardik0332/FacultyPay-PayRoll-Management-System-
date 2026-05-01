@@ -1,47 +1,76 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart'; // ✅ Added for SystemChrome (Orientation Lock)
+import 'package:flutter/foundation.dart'; // ✅ Added for kIsWeb
 import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:animated_theme_switcher/animated_theme_switcher.dart';
+import 'package:animations/animations.dart';
 import 'firebase_options.dart';
 
-import 'pages/login_page.dart';
-import 'pages/admin/admin_dashboard.dart';
-import 'pages/admin/add_faculty.dart';
-import 'pages/admin/view_faculty_page.dart';
-import 'pages/admin/admin_view_attendance_page.dart';
-import 'pages/admin/calculate_salary_screen.dart';
-import 'pages/admin/admin_reports_page.dart';
-import 'pages/admin/admin_profile_page.dart';
 import 'pages/admin/admin_base_wrapper.dart';
+import 'pages/faculty/faculty_base_wrapper.dart';
 
-import 'pages/faculty/faculty_dashboard.dart';
-import 'pages/faculty/add_attendance_page.dart';
-import 'pages/faculty/faculty_salary_summary_page.dart';
-import 'pages/faculty/faculty_profile_page.dart';
-import 'ui_tests/payments_mobile_ui.dart';
-import 'ui_tests/faculty_dashboard.dart';
-import 'ui_tests/add_attendance_page.dart';
-import 'ui_tests/faculty_profile_page.dart';
-
+import 'theme/theme_manager.dart';
 import 'services/auth_gate.dart';
 
-// ✅ Global Variable for Dark Mode (The Sidebar talks to this!)
-final ValueNotifier<ThemeMode> themeNotifier = ValueNotifier(ThemeMode.system);
+// ✅ 1. Define the High Importance Channel
+const AndroidNotificationChannel channel = AndroidNotificationChannel(
+  'high_importance_channel', // id
+  'High Importance Notifications', // title
+  description: 'This channel is used for important notifications.', // description
+  importance: Importance.max, // This ensures the "Heads-up" popup
+  playSound: true,
+);
 
-// Removes the "Flashing/Loading" animation between pages
-class NoAnimationPageTransitionsBuilder extends PageTransitionsBuilder {
-  const NoAnimationPageTransitionsBuilder();
-  @override
-  Widget buildTransitions<T>(PageRoute<T> route, BuildContext context, Animation<double> animation, Animation<double> secondaryAnimation, Widget child) {
-    return child;
-  }
+// ✅ 2. Initialize local notifications plugin
+final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
+
+@pragma('vm:entry-point')
+Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  debugPrint("Handling a background message: ${message.messageId}");
 }
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // ✅ Lock orientation to Portrait for Mobile App ONLY
+  if (!kIsWeb) {
+    await SystemChrome.setPreferredOrientations([
+      DeviceOrientation.portraitUp,
+      DeviceOrientation.portraitDown,
+    ]);
+  }
+
+  try {
+    await dotenv.load(fileName: ".env");
+  } catch (e) {
+    debugPrint("DotEnv Init Error: $e");
+  }
+
   try {
     await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+
+    FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+
+    // ✅ 3. Create the notification channel on the device
+    await flutterLocalNotificationsPlugin
+        .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
+        ?.createNotificationChannel(channel);
+
+    // ✅ 4. Update foreground presentation options for the popup effect
+    await FirebaseMessaging.instance.setForegroundNotificationPresentationOptions(
+      alert: true,
+      badge: true,
+      sound: true,
+    );
+
   } catch (e) {
     debugPrint("Firebase Init Error: $e");
   }
+
   runApp(const MyApp());
 }
 
@@ -50,61 +79,56 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // ✅ Wraps the app to listen for Dark Mode changes from the Sidebar
-    return ValueListenableBuilder<ThemeMode>(
-      valueListenable: themeNotifier,
-      builder: (_, ThemeMode currentMode, __) {
+    // 1. Grab initial colors
+    final colors = ThemeManager.instance.colors;
+    final isDark = ThemeManager.instance.isDarkMode;
+
+    final initialTheme = ThemeData(
+      brightness: isDark ? Brightness.dark : Brightness.light,
+      primaryColor: colors.primary,
+      scaffoldBackgroundColor: isDark ? Colors.black : colors.bgBottom,
+      cardColor: colors.card,
+      appBarTheme: AppBarTheme(
+        backgroundColor: colors.card,
+        foregroundColor: colors.textMain,
+      ),
+      useMaterial3: false,
+      pageTransitionsTheme: const PageTransitionsTheme(
+        builders: {
+          TargetPlatform.android: SharedAxisPageTransitionsBuilder(
+            transitionType: SharedAxisTransitionType.scaled,
+          ),
+          TargetPlatform.iOS: SharedAxisPageTransitionsBuilder(
+            transitionType: SharedAxisTransitionType.scaled,
+          ),
+          TargetPlatform.windows: SharedAxisPageTransitionsBuilder(
+            transitionType: SharedAxisTransitionType.scaled,
+          ),
+          TargetPlatform.macOS: SharedAxisPageTransitionsBuilder(
+            transitionType: SharedAxisTransitionType.scaled,
+          ),
+          TargetPlatform.linux: SharedAxisPageTransitionsBuilder(
+            transitionType: SharedAxisTransitionType.scaled,
+          ),
+        },
+      ),
+    );
+
+    // 2. ThemeProvider handles ALL the rebuilding now!
+    return ThemeProvider(
+      initTheme: initialTheme,
+      builder: (context, myTheme) {
         return MaterialApp(
           debugShowCheckedModeBanner: false,
           title: 'FacultyPay',
-          themeMode: currentMode,
-
-          // ☀️ LIGHT THEME
-          theme: ThemeData(
-            brightness: Brightness.light,
-            primaryColor: const Color(0xff45a182),
-            scaffoldBackgroundColor: const Color(0xfff6f7f7),
-            cardColor: Colors.white,
-            appBarTheme: const AppBarTheme(backgroundColor: Color(0xff45a182), foregroundColor: Colors.white),
-            useMaterial3: false,
-            pageTransitionsTheme: const PageTransitionsTheme(
-              builders: {
-                TargetPlatform.android: NoAnimationPageTransitionsBuilder(),
-                TargetPlatform.iOS: NoAnimationPageTransitionsBuilder(),
-                TargetPlatform.windows: NoAnimationPageTransitionsBuilder(),
-                TargetPlatform.macOS: NoAnimationPageTransitionsBuilder(),
-                TargetPlatform.linux: NoAnimationPageTransitionsBuilder(),
-              },
-            ),
-          ),
-
-          // 🌙 DARK THEME
-          darkTheme: ThemeData(
-            brightness: Brightness.dark,
-            primaryColor: const Color(0xff45a182),
-            scaffoldBackgroundColor: Colors.black,
-            cardColor: const Color(0xff121212),
-            appBarTheme: const AppBarTheme(backgroundColor: Color(0xff121212), foregroundColor: Colors.white),
-            useMaterial3: false,
-            pageTransitionsTheme: const PageTransitionsTheme(
-              builders: {
-                TargetPlatform.android: NoAnimationPageTransitionsBuilder(),
-                TargetPlatform.iOS: NoAnimationPageTransitionsBuilder(),
-                TargetPlatform.windows: NoAnimationPageTransitionsBuilder(),
-                TargetPlatform.macOS: NoAnimationPageTransitionsBuilder(),
-                TargetPlatform.linux: NoAnimationPageTransitionsBuilder(),
-              },
-            ),
-          ),
-
-          // home: const PaymentsMobileUI(),
-          // home: const AddAttendancePageUI(),
-          // home: const FacultyProfilePageUI(),
-          // home: const FacultyDashboardUI(),
+          theme: myTheme,
           home: const AuthGate(),
-
+          builder: (context, child) {
+            return ThemeSwitchingArea(
+              child: child!,
+            );
+          },
           routes: {
-            // --- ADMIN ROUTES ---
             '/admin/dashboard': (context) => const AdminBaseWrapper(initialIndex: 0),
             '/admin/view-attendance': (context) => const AdminBaseWrapper(initialIndex: 1),
             '/admin/calculate-salary': (context) => const AdminBaseWrapper(initialIndex: 2),
@@ -112,12 +136,10 @@ class MyApp extends StatelessWidget {
             '/admin/add-faculty': (context) => const AdminBaseWrapper(initialIndex: 4),
             '/admin/reports': (context) => const AdminBaseWrapper(initialIndex: 5),
             '/admin/profile': (context) => const AdminBaseWrapper(initialIndex: 6),
-
-            // --- FACULTY ROUTES ---
-            '/faculty/dashboard': (context) => const FacultyDashboard(initialIndex: 0),
-            '/faculty/add-attendance': (context) => const FacultyDashboard(initialIndex: 1),
-            '/faculty/salary-history': (context) => const FacultyDashboard(initialIndex: 2),
-            '/faculty/profile': (context) => const FacultyDashboard(initialIndex: 3),
+            '/faculty/dashboard': (context) => const FacultyBaseWrapper(initialIndex: 0),
+            '/faculty/add-attendance': (context) => const FacultyBaseWrapper(initialIndex: 1),
+            '/faculty/salary-history': (context) => const FacultyBaseWrapper(initialIndex: 2),
+            '/faculty/profile': (context) => const FacultyBaseWrapper(initialIndex: 3),
           },
         );
       },

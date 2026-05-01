@@ -1,9 +1,13 @@
+import 'package:animations/animations.dart';
+import 'package:animated_theme_switcher/animated_theme_switcher.dart';
 import 'dart:ui';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:image_picker/image_picker.dart';
+
+import '../../theme/theme_manager.dart'; // ✅ Added ThemeManager
 
 class AdminProfilePage extends StatefulWidget {
   const AdminProfilePage({super.key});
@@ -14,10 +18,6 @@ class AdminProfilePage extends StatefulWidget {
 
 class _AdminProfilePageState extends State<AdminProfilePage> {
   final Color primaryRed = const Color(0xFFE05B5C);
-  final Color successGreen = const Color(0xFF4ADE80);
-  final Color pendingOrange = const Color(0xFFFBBF24);
-  final Color verifiedBlue = const Color(0xFF60A5FA);
-
   final User? currentUser = FirebaseAuth.instance.currentUser;
   final TextEditingController nameController = TextEditingController();
   final ImagePicker _picker = ImagePicker();
@@ -57,14 +57,19 @@ class _AdminProfilePageState extends State<AdminProfilePage> {
         });
       }
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: $e"), backgroundColor: primaryRed));
+      if (mounted) {
+        final colors = ThemeManager.instance.colors;
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: $e"), backgroundColor: colors.error));
+      }
       setState(() => isLoading = false);
     }
   }
 
   Future<void> _updateProfile() async {
+    final colors = ThemeManager.instance.colors;
+
     if (nameController.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: const Text("Name cannot be empty"), backgroundColor: primaryRed));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: const Text("Name cannot be empty"), backgroundColor: colors.error));
       return;
     }
 
@@ -78,16 +83,18 @@ class _AdminProfilePageState extends State<AdminProfilePage> {
       }, SetOptions(merge: true));
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: const Text("Profile updated successfully!"), backgroundColor: successGreen));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: const Text("Profile updated successfully!"), backgroundColor: colors.success));
       }
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: $e"), backgroundColor: primaryRed));
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: $e"), backgroundColor: colors.error));
     } finally {
       if (mounted) setState(() => isSaving = false);
     }
   }
 
   Future<void> _pickImage() async {
+    final colors = ThemeManager.instance.colors;
+
     try {
       final XFile? image = await _picker.pickImage(
         source: ImageSource.gallery,
@@ -108,32 +115,78 @@ class _AdminProfilePageState extends State<AdminProfilePage> {
         }, SetOptions(merge: true));
 
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: const Text("Profile picture updated!"), backgroundColor: successGreen));
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: const Text("Profile picture updated!"), backgroundColor: colors.success));
         }
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error picking image: $e"), backgroundColor: primaryRed));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error picking image: $e"), backgroundColor: colors.error));
       }
     }
   }
 
+  // --- PASSWORD RESET LOGIC ---
+  Future<void> _sendPasswordReset() async {
+    final colors = ThemeManager.instance.colors;
+
+    if (email.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: const Text("Email address not found."), backgroundColor: colors.error));
+      return;
+    }
+
+    bool? confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: colors.card,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Text("Reset Password", style: TextStyle(color: colors.textMain, fontWeight: FontWeight.bold)),
+        content: Text("We will send a secure password reset link to $email.", style: TextStyle(color: colors.textMuted)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: Text("Cancel", style: TextStyle(color: colors.textMuted)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: Text("Send Email", style: TextStyle(color: colors.primary, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      try {
+        await FirebaseAuth.instance.sendPasswordResetEmail(email: email);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Password reset email sent to $email!"), backgroundColor: colors.success));
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: $e"), backgroundColor: colors.error));
+        }
+      }
+    }
+  }
+
+  // --- LOGOUT LOGIC ---
   Future<void> _confirmLogout() async {
+    final colors = ThemeManager.instance.colors;
+
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF2A2E39),
+        backgroundColor: colors.card,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text("Sign Out", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-        content: Text("Are you sure you want to sign out of the Admin Portal?", style: TextStyle(color: Colors.white.withValues(alpha: 0.7))),
+        title: Text("Sign Out", style: TextStyle(color: colors.textMain, fontWeight: FontWeight.bold)),
+        content: Text("Are you sure you want to sign out of the Admin Portal?", style: TextStyle(color: colors.textMuted)),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(ctx, false),
-              child: Text("Cancel", style: TextStyle(color: Colors.white.withValues(alpha: 0.5)))
+              child: Text("Cancel", style: TextStyle(color: colors.textMuted))
           ),
           TextButton(
               onPressed: () => Navigator.pop(ctx, true),
-              child: Text("Sign Out", style: TextStyle(color: primaryRed, fontWeight: FontWeight.bold))
+              child: Text("Sign Out", style: TextStyle(color: colors.error, fontWeight: FontWeight.bold))
           ),
         ],
       ),
@@ -149,134 +202,152 @@ class _AdminProfilePageState extends State<AdminProfilePage> {
 
   @override
   Widget build(BuildContext context) {
-    return Stack( // ✅ REMOVED SCAFFOLD, wrapped natively in Stack
-      children: [
-        // 1. Background Gradient
-        Container(
-          decoration: const BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: [Color(0xFF3B4154), Color(0xFF1E212A)],
-            ),
-          ),
-        ),
+    return AnimatedBuilder(
+        animation: ThemeManager.instance,
+        builder: (context, child) {
+          final colors = ThemeManager.instance.colors;
+          final isDark = ThemeManager.instance.isDarkMode;
 
-        // 2. Main Content
-        SafeArea(
-          bottom: false,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+          return Stack(
             children: [
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
-                child: _buildHeader(),
+              // 1. Background Gradient (Dynamic)
+              Container(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [colors.bgTop, colors.bgBottom],
+                  ),
+                ),
               ),
 
-              // Main Container
-              Expanded(
-                child: Container(
-                  width: double.infinity,
-                  decoration: const BoxDecoration(
-                    color: Color(0xFF242832),
-                    borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
-                  ),
-                  child: isLoading
-                      ? Center(child: CircularProgressIndicator(color: primaryRed))
-                      : SingleChildScrollView(
-                    physics: const BouncingScrollPhysics(),
-                    padding: const EdgeInsets.only(top: 32, left: 20, right: 20, bottom: 120), // ✅ Preserved 120px padding
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.center,
+              // 2. Main Content
+              SafeArea(
+                bottom: false,
+                child: Center(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 800),
+                    child: SingleChildScrollView(
+                      physics: const BouncingScrollPhysics(),
+                      child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        // Avatar Section
-                        GestureDetector(
-                          onTap: _pickImage,
-                          child: Stack(
-                            alignment: Alignment.bottomRight,
-                            children: [
-                              Container(
-                                padding: const EdgeInsets.all(4),
-                                decoration: BoxDecoration(
-                                  shape: BoxShape.circle,
-                                  border: Border.all(color: verifiedBlue.withValues(alpha: 0.5), width: 2),
-                                ),
-                                child: CircleAvatar(
-                                  radius: 50,
-                                  backgroundColor: const Color(0xFF4A5060),
-                                  backgroundImage: avatarBase64 != null && avatarBase64!.isNotEmpty ? MemoryImage(base64Decode(avatarBase64!)) : null,
-                                  child: (avatarBase64 == null || avatarBase64!.isEmpty)
-                                      ? const Icon(Icons.person, color: Colors.white, size: 40)
-                                      : null,
-                                ),
-                              ),
-                              Container(
-                                padding: const EdgeInsets.all(8),
-                                decoration: BoxDecoration(color: verifiedBlue, shape: BoxShape.circle, border: Border.all(color: const Color(0xFF242832), width: 3)),
-                                child: const Icon(Icons.camera_alt, color: Colors.white, size: 14),
-                              )
-                            ],
-                          ),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
+                          child: _buildHeader(colors, isDark),
                         ),
-                        const SizedBox(height: 12),
-                        Text(role, style: TextStyle(color: verifiedBlue, fontSize: 12, fontWeight: FontWeight.w900, letterSpacing: 1.5)),
-                        const SizedBox(height: 32),
 
-                        // Form Section
-                        Align(
-                          alignment: Alignment.centerLeft,
-                          child: Text("ACCOUNT DETAILS", style: TextStyle(color: Colors.white.withValues(alpha: 0.5), fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 1)),
-                        ),
-                        const SizedBox(height: 16),
-
-                        _buildEditableField("Full Name", Icons.person_outline, nameController),
-                        const SizedBox(height: 16),
-                        _buildReadOnlyField("Email Address", email, Icons.email_outlined),
-
-                        const SizedBox(height: 32),
-
-                        // Save Button
-                        _buildSaveButton(),
-
-                        const SizedBox(height: 40),
-                        Container(height: 1, color: Colors.white.withValues(alpha: 0.05)),
-                        const SizedBox(height: 32),
-
-                        // Logout Button
-                        GestureDetector(
-                          onTap: _confirmLogout,
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(vertical: 16),
+                        // Main Container
+                        Container(
+                            width: double.infinity,
                             decoration: BoxDecoration(
-                              color: primaryRed.withValues(alpha: 0.1),
-                              borderRadius: BorderRadius.circular(16),
-                              border: Border.all(color: primaryRed.withValues(alpha: 0.3)),
+                              color: colors.card,
+                              borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
+                              boxShadow: isDark ? [] : [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 20, offset: const Offset(0, -5))],
                             ),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(Icons.logout, color: primaryRed, size: 20),
-                                const SizedBox(width: 8),
-                                Text("Sign Out", style: TextStyle(color: primaryRed, fontSize: 15, fontWeight: FontWeight.bold)),
-                              ],
+                            child: isLoading
+                                ? Center(child: CircularProgressIndicator(color: colors.primary))
+                                : Padding(
+                              padding: const EdgeInsets.only(top: 32, left: 20, right: 20, bottom: 120),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.center,
+                                children: [
+                                  // Avatar Section
+                                  GestureDetector(
+                                    onTap: _pickImage,
+                                    child: Stack(
+                                      alignment: Alignment.bottomRight,
+                                      children: [
+                                        Container(
+                                          padding: const EdgeInsets.all(4),
+                                          decoration: BoxDecoration(
+                                            shape: BoxShape.circle,
+                                            border: Border.all(color: colors.primary.withValues(alpha: 0.5), width: 2),
+                                          ),
+                                          child: CircleAvatar(
+                                            radius: 50,
+                                            backgroundColor: isDark ? const Color(0xFF4A5060) : colors.bgTop,
+                                            backgroundImage: avatarBase64 != null && avatarBase64!.isNotEmpty ? MemoryImage(base64Decode(avatarBase64!)) : null,
+                                            child: (avatarBase64 == null || avatarBase64!.isEmpty)
+                                                ? Icon(Icons.person, color: colors.textMuted, size: 40)
+                                                : null,
+                                          ),
+                                        ),
+                                        Container(
+                                          padding: const EdgeInsets.all(8),
+                                          decoration: BoxDecoration(color: colors.primary, shape: BoxShape.circle, border: Border.all(color: colors.card, width: 3)),
+                                          child: const Icon(Icons.camera_alt, color: Colors.white, size: 14),
+                                        )
+                                      ],
+                                    ),
+                                  ),
+                                  const SizedBox(height: 12),
+                                  Text(role, style: TextStyle(color: colors.primary, fontSize: 12, fontWeight: FontWeight.w900, letterSpacing: 1.5)),
+                                  const SizedBox(height: 32),
+
+                                  // Form Section
+                                  Align(
+                                    alignment: Alignment.centerLeft,
+                                    child: Text("ACCOUNT DETAILS", style: TextStyle(color: colors.textMuted, fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 1)),
+                                  ),
+                                  const SizedBox(height: 16),
+
+                                  _buildEditableField("Full Name", Icons.person_outline, nameController, colors, isDark),
+                                  const SizedBox(height: 16),
+                                  _buildReadOnlyField("Email Address", email, Icons.email_outlined, colors, isDark),
+
+                                  const SizedBox(height: 32),
+
+                                  // Save Button
+                                  _buildSaveButton(colors),
+
+                                  const SizedBox(height: 40),
+                                  Container(height: 1, color: colors.textMain.withValues(alpha: 0.05)),
+                                  const SizedBox(height: 32),
+
+                                  // Reset Password Button
+                                  _buildResetPasswordButton(colors, isDark),
+                                  const SizedBox(height: 16),
+
+                                  // Logout Button
+                                  GestureDetector(
+                                    onTap: _confirmLogout,
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(vertical: 16),
+                                      decoration: BoxDecoration(
+                                        color: colors.error.withValues(alpha: 0.1),
+                                        borderRadius: BorderRadius.circular(16),
+                                        border: Border.all(color: colors.error.withValues(alpha: 0.3)),
+                                      ),
+                                      child: Row(
+                                        mainAxisAlignment: MainAxisAlignment.center,
+                                        children: [
+                                          Icon(Icons.logout, color: colors.error, size: 20),
+                                          const SizedBox(width: 8),
+                                          Text("Sign Out", style: TextStyle(color: colors.error, fontSize: 15, fontWeight: FontWeight.bold)),
+                                        ],
+                                      ),
+                                    ),
+                                  )
+                                ],
+                              ),
                             ),
                           ),
-                        )
-                      ],
+                        ],
+                      ),
                     ),
                   ),
                 ),
               ),
             ],
-          ),
-        ),
-      ],
+          );
+        }
     );
   }
 
   // --- UI COMPONENTS ---
 
-  Widget _buildHeader() {
+  Widget _buildHeader(AppColors colors, bool isDark) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
@@ -286,49 +357,104 @@ class _AdminProfilePageState extends State<AdminProfilePage> {
             children: [
               Text("Admin Action", style: TextStyle(color: primaryRed, fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 1.5)),
               const SizedBox(height: 2),
-              const Text("My Profile", style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold, color: Colors.white, letterSpacing: -0.5), overflow: TextOverflow.ellipsis),
+              Text("My Profile", style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold, color: colors.textMain, letterSpacing: -0.5), overflow: TextOverflow.ellipsis),
             ],
           ),
         ),
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Theme Toggle
+            // Theme Toggle
+            ThemeSwitcher(
+              clipper: const ThemeSwitcherCircleClipper(),
+              builder: (context) {
+                return GestureDetector(
+                  onTap: () {
+                    ThemeManager.instance.toggleTheme();
+                    final newColors = ThemeManager.instance.colors;
+                    final newIsDark = ThemeManager.instance.isDarkMode;
+                    ThemeSwitcher.of(context).changeTheme(
+                      theme: ThemeData(
+                        brightness: newIsDark ? Brightness.dark : Brightness.light,
+                        primaryColor: newColors.primary,
+                        scaffoldBackgroundColor: newIsDark ? Colors.black : newColors.bgBottom,
+                        cardColor: newColors.card,
+                        appBarTheme: AppBarTheme(
+                          backgroundColor: newColors.card,
+                          foregroundColor: newColors.textMain,
+                        ),
+                        useMaterial3: false,
+                        pageTransitionsTheme: const PageTransitionsTheme(
+                          builders: {
+                            TargetPlatform.android: SharedAxisPageTransitionsBuilder(transitionType: SharedAxisTransitionType.scaled),
+                            TargetPlatform.iOS: SharedAxisPageTransitionsBuilder(transitionType: SharedAxisTransitionType.scaled),
+                            TargetPlatform.windows: SharedAxisPageTransitionsBuilder(transitionType: SharedAxisTransitionType.scaled),
+                            TargetPlatform.macOS: SharedAxisPageTransitionsBuilder(transitionType: SharedAxisTransitionType.scaled),
+                            TargetPlatform.linux: SharedAxisPageTransitionsBuilder(transitionType: SharedAxisTransitionType.scaled),
+                          },
+                        ),
+                      ),
+                    );
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: isDark ? colors.textMain.withValues(alpha: 0.1) : colors.textMuted.withValues(alpha: 0.2),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      ThemeManager.instance.currentMode == AppThemeMode.system
+                          ? Icons.brightness_auto
+                          : (ThemeManager.instance.currentMode == AppThemeMode.light ? Icons.light_mode : Icons.dark_mode_outlined),
+                      color: ThemeManager.instance.currentMode == AppThemeMode.light ? Colors.amber : colors.textMain,
+                      size: 20,
+                    ),
+                  ),
+                );
+              }
+            ),
+          ],
+        )
       ],
     );
   }
 
-  Widget _buildEditableField(String label, IconData icon, TextEditingController controller) {
+  Widget _buildEditableField(String label, IconData icon, TextEditingController controller, AppColors colors, bool isDark) {
     return TextFormField(
       controller: controller,
-      style: const TextStyle(color: Colors.white, fontSize: 15),
+      style: TextStyle(color: colors.textMain, fontSize: 15),
       decoration: InputDecoration(
         labelText: label,
-        labelStyle: TextStyle(color: Colors.white.withValues(alpha: 0.5)),
-        prefixIcon: Icon(icon, color: Colors.white.withValues(alpha: 0.5), size: 20),
+        labelStyle: TextStyle(color: colors.textMuted),
+        prefixIcon: Icon(icon, color: colors.textMuted, size: 20),
         filled: true,
-        fillColor: const Color(0xFF2A2E39),
+        fillColor: isDark ? colors.textMain.withValues(alpha: 0.03) : colors.bgTop,
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.05))),
-        focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide(color: verifiedBlue, width: 1.5)),
+        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide(color: isDark ? colors.textMain.withValues(alpha: 0.1) : Colors.transparent)),
+        focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide(color: colors.primary, width: 1.5)),
       ),
     );
   }
 
-  Widget _buildReadOnlyField(String label, String value, IconData icon) {
+  Widget _buildReadOnlyField(String label, String value, IconData icon, AppColors colors, bool isDark) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.02),
+        color: isDark ? colors.textMain.withValues(alpha: 0.02) : colors.bgTop,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
+        border: Border.all(color: isDark ? colors.textMain.withValues(alpha: 0.05) : Colors.transparent),
       ),
       child: Row(
         children: [
-          Icon(icon, color: Colors.white.withValues(alpha: 0.3), size: 20),
+          Icon(icon, color: colors.textMuted.withValues(alpha: 0.5), size: 20),
           const SizedBox(width: 12),
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(label, style: TextStyle(color: Colors.white.withValues(alpha: 0.4), fontSize: 11, fontWeight: FontWeight.bold)),
+              Text(label, style: TextStyle(color: colors.textMuted, fontSize: 11, fontWeight: FontWeight.bold)),
               const SizedBox(height: 2),
-              Text(value, style: TextStyle(color: Colors.white.withValues(alpha: 0.7), fontSize: 15)),
+              Text(value, style: TextStyle(color: colors.textMuted, fontSize: 15)),
             ],
           )
         ],
@@ -336,21 +462,44 @@ class _AdminProfilePageState extends State<AdminProfilePage> {
     );
   }
 
-  Widget _buildSaveButton() {
+  Widget _buildSaveButton(AppColors colors) {
     return GestureDetector(
       onTap: isSaving ? null : _updateProfile,
       child: Container(
         width: double.infinity,
         padding: const EdgeInsets.symmetric(vertical: 18),
         decoration: BoxDecoration(
-          color: isSaving ? verifiedBlue.withValues(alpha: 0.5) : verifiedBlue,
+          color: isSaving ? colors.primary.withValues(alpha: 0.5) : colors.primary,
           borderRadius: BorderRadius.circular(16),
-          boxShadow: [BoxShadow(color: verifiedBlue.withValues(alpha: 0.2), blurRadius: 15, offset: const Offset(0, 5))],
+          boxShadow: [BoxShadow(color: colors.primary.withValues(alpha: 0.2), blurRadius: 15, offset: const Offset(0, 5))],
         ),
         child: Center(
           child: isSaving
               ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
               : const Text("Save Changes", style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildResetPasswordButton(AppColors colors, bool isDark) {
+    return GestureDetector(
+      onTap: _sendPasswordReset,
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(vertical: 16),
+        decoration: BoxDecoration(
+          color: Colors.transparent,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: isDark ? colors.textMain.withValues(alpha: 0.2) : colors.textMuted.withValues(alpha: 0.3), width: 1.5),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.lock_reset, color: colors.textMain.withValues(alpha: 0.8), size: 20),
+            const SizedBox(width: 8),
+            Text("Reset Password", style: TextStyle(color: colors.textMain.withValues(alpha: 0.8), fontSize: 15, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
+          ],
         ),
       ),
     );

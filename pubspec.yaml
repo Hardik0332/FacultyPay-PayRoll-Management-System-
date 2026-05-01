@@ -52,6 +52,10 @@ dependencies:
   flutter_local_notifications: ^21.0.0
   http: ^1.6.0
   googleapis_auth: ^2.3.0
+  flutter_dotenv: ^6.0.1
+  permission_handler: ^12.0.1
+  animated_theme_switcher: ^2.0.10
+  animations: ^2.2.0
 
 dev_dependencies:
   flutter_test:
@@ -78,6 +82,7 @@ flutter:
 
   assets:
     - assets/images/
+    - .env
   # To add assets to your application, add an assets section, like this:
   # assets:
   #   - images/a_dot_burr.jpeg

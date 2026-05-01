@@ -4,14 +4,10 @@ import 'package:firebase_auth/firebase_auth.dart';
 
 import '../../theme/theme_manager.dart'; // ✅ IMPORT THE THEME MANAGER
 import 'package:animations/animations.dart'; // ✅ Added morph animations
-
-import 'admin_dashboard.dart';
-import 'admin_view_attendance_page.dart';
-import 'calculate_salary_screen.dart';
-import 'view_faculty_page.dart';
-import 'add_faculty.dart';
-import 'admin_reports_page.dart';
-import 'admin_profile_page.dart';
+import 'faculty_dashboard.dart';
+import 'add_attendance_page.dart';
+import 'faculty_salary_summary_page.dart';
+import 'faculty_profile_page.dart';
 
 class FadeIndexedStack extends StatelessWidget {
   final int index;
@@ -47,15 +43,15 @@ class FadeIndexedStack extends StatelessWidget {
   }
 }
 
-class AdminBaseWrapper extends StatefulWidget {
+class FacultyBaseWrapper extends StatefulWidget {
   final int initialIndex;
-  const AdminBaseWrapper({super.key, required this.initialIndex});
+  const FacultyBaseWrapper({super.key, required this.initialIndex});
 
   @override
-  State<AdminBaseWrapper> createState() => _AdminBaseWrapperState();
+  State<FacultyBaseWrapper> createState() => _FacultyBaseWrapperState();
 }
 
-class _AdminBaseWrapperState extends State<AdminBaseWrapper> {
+class _FacultyBaseWrapperState extends State<FacultyBaseWrapper> {
   late int _currentNavIndex;
 
   // ✅ 1. Add the Tab History Stack
@@ -70,13 +66,10 @@ class _AdminBaseWrapperState extends State<AdminBaseWrapper> {
   }
 
   late final List<Widget> _pages = [
-    const AdminDashboard(),
-    const AdminVerifyAttendancePage(),
-    const AdminCalculateSalaryPage(),
-    const AdminViewFacultyPage(),
-    const AdminAddFacultyPage(),
-    const AdminReportsPage(),
-    const AdminProfilePage(),
+    const FacultyDashboard(),
+    const AddAttendancePage(),
+    const FacultySalaryHistoryPage(),
+    const FacultyProfilePage(),
   ];
 
   // ✅ 2. Create a central method to handle all tab routing
@@ -95,90 +88,69 @@ class _AdminBaseWrapperState extends State<AdminBaseWrapper> {
   Widget build(BuildContext context) {
     final isDesktop = MediaQuery.of(context).size.width >= 850;
 
-    // ✅ WRAP IN ANIMATED BUILDER TO LISTEN TO THEME CHANGES
-    return AnimatedBuilder(
-        animation: ThemeManager.instance,
-        builder: (context, child) {
-          final colors = ThemeManager.instance.colors;
-          final isDark = ThemeManager.instance.isDarkMode;
+    // ✅ REMOVED AnimatedBuilder here!
+    // Just grab the colors normally. The ThemeSwitcher in main.dart handles the rebuild now.
+    final colors = ThemeManager.instance.colors;
+    final isDark = ThemeManager.instance.isDarkMode;
 
-          // ✅ 3. Update the PopScope to read from our History Stack
-          return PopScope(
-            canPop: _tabHistory.length <= 1, // Let Android exit app if only 1 page left
-            onPopInvokedWithResult: (didPop, dynamic result) {
-              if (didPop) return; // App is exiting
+    // ✅ 3. Update the PopScope to read from our History Stack
+    return PopScope(
+      canPop: _tabHistory.length <= 1, // Let Android exit app if only 1 page left
+      onPopInvokedWithResult: (didPop, dynamic result) {
+        if (didPop) return; // App is exiting
 
-              if (_tabHistory.length > 1) {
-                setState(() {
-                  _tabHistory.removeLast(); // Pop current view
-                  _currentNavIndex = _tabHistory.last; // Navigate to previous view
-                });
-              }
-            },
-            child: Scaffold(
-              backgroundColor: colors.bgBottom, // ✅ DYNAMIC
-              body: isDesktop ? _buildDesktopLayout(colors) : _buildMobileLayout(colors, isDark),
-            ),
-          );
+        if (_tabHistory.length > 1) {
+          setState(() {
+            _tabHistory.removeLast(); // Pop current view
+            _currentNavIndex = _tabHistory.last; // Navigate to previous view
+          });
         }
+      },
+      child: Scaffold(
+        backgroundColor: colors.bgBottom, // ✅ DYNAMIC
+        body: isDesktop ? _buildDesktopLayout(colors) : _buildMobileLayout(colors, isDark),
+      ),
     );
   }
 
-  // ====================================================================
-  // ✅ DESKTOP LAYOUT (SIDEBAR + CONTENT)
-  // ====================================================================
   Widget _buildDesktopLayout(AppColors colors) {
     return Row(
       children: [
-        // Sidebar Navigation
         Container(
           width: 250,
-          color: colors.card, // ✅ DYNAMIC BACKGROUND
+          color: colors.card, // ✅ DYNAMIC
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Logo Area
               Padding(
                 padding: const EdgeInsets.only(top: 40, left: 24, bottom: 40),
                 child: Row(
                   children: [
-                    Icon(Icons.admin_panel_settings, color: colors.primary, size: 28),
+                    Icon(Icons.school, color: colors.primary, size: 28),
                     const SizedBox(width: 12),
-                    Text(
-                      "Admin Portal",
-                      style: TextStyle(color: colors.textMain, fontSize: 20, fontWeight: FontWeight.bold),
-                    ),
+                    Text("Faculty Portal", style: TextStyle(color: colors.textMain, fontSize: 20, fontWeight: FontWeight.bold)),
                   ],
                 ),
               ),
-
-              // Navigation Links
               Expanded(
                 child: SingleChildScrollView(
                   physics: const BouncingScrollPhysics(),
                   child: Column(
                     children: [
-                      _buildSidebarItem(Icons.dashboard, "Dashboard", 0, colors),
-                      _buildSidebarItem(Icons.checklist, "Verify Logs", 1, colors),
-                      _buildSidebarItem(Icons.account_balance, "Process Payments", 2, colors),
-                      _buildSidebarItem(Icons.people, "View Faculty", 3, colors),
-                      _buildSidebarItem(Icons.person_add, "Add Faculty", 4, colors),
-                      _buildSidebarItem(Icons.receipt_long, "Reports", 5, colors),
-                      _buildSidebarItem(Icons.person, "My Profile", 6, colors),
+                      _buildSidebarItem(Icons.home, "Home", 0, colors),
+                      _buildSidebarItem(Icons.edit_document, "Log Hours", 1, colors),
+                      _buildSidebarItem(Icons.account_balance_wallet, "Payments", 2, colors),
+                      _buildSidebarItem(Icons.person, "My Profile", 3, colors),
                     ],
                   ),
                 ),
               ),
-
-              // Logout Area at bottom of sidebar
               Padding(
                 padding: const EdgeInsets.all(24.0),
                 child: GestureDetector(
                   onTap: () async {
                     await FirebaseAuth.instance.signOut();
-                    if (mounted) {
-                      Navigator.of(context).pushNamedAndRemoveUntil('/', (route) => false);
-                    }
+                    if (mounted) Navigator.of(context).pushNamedAndRemoveUntil('/', (route) => false);
                   },
                   child: Row(
                     children: [
@@ -192,22 +164,18 @@ class _AdminBaseWrapperState extends State<AdminBaseWrapper> {
             ],
           ),
         ),
-
-        // Main Content Area
         Expanded(
           child: Stack(
             children: [
-              // Shared Background Gradient for Content Area
               Container(
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
                     begin: Alignment.topCenter,
                     end: Alignment.bottomCenter,
-                    colors: [colors.bgTop, colors.bgBottom], // ✅ DYNAMIC
+                    colors: [colors.bgTop, colors.bgBottom],
                   ),
                 ),
               ),
-              // The active page
               FadeIndexedStack(
                 index: _currentNavIndex,
                 children: _pages,
@@ -250,31 +218,23 @@ class _AdminBaseWrapperState extends State<AdminBaseWrapper> {
     );
   }
 
-  // ====================================================================
-  // ✅ MOBILE LAYOUT (FLOATING BOTTOM BAR)
-  // ====================================================================
   Widget _buildMobileLayout(AppColors colors, bool isDark) {
     return Stack(
       children: [
-        // Shared Background Gradient
         Container(
           decoration: BoxDecoration(
             gradient: LinearGradient(
               begin: Alignment.topCenter,
               end: Alignment.bottomCenter,
-              colors: [colors.bgTop, colors.bgBottom], // ✅ DYNAMIC
+              colors: [colors.bgTop, colors.bgBottom],
             ),
           ),
         ),
-
-        // Pages
         FadeIndexedStack(
           index: _currentNavIndex,
           children: _pages,
           duration: const Duration(milliseconds: 400), // ✅ Make it slower for a more dramatic effect
         ),
-
-        // Floating Bottom Navigation (Crystal Clear Glass)
         Positioned(
           bottom: 30, left: 0, right: 0,
           child: Center(
@@ -295,7 +255,7 @@ class _AdminBaseWrapperState extends State<AdminBaseWrapper> {
     return ClipRRect(
       borderRadius: BorderRadius.circular(40),
       child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 7, sigmaY: 7),
+        filter: ImageFilter.blur(sigmaX: 7, sigmaY: 7), // Smoother blur for light mode
         child: Container(
           height: 70,
           decoration: BoxDecoration(
@@ -304,21 +264,14 @@ class _AdminBaseWrapperState extends State<AdminBaseWrapper> {
             border: Border.all(color: isDark ? Colors.white.withValues(alpha: 0.05) : Colors.white),
             boxShadow: isDark ? [] : [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 15, offset: const Offset(0, 5))],
           ),
-          child: SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            physics: const BouncingScrollPhysics(),
-            padding: const EdgeInsets.symmetric(horizontal: 10),
-            child: Row(
-              children: [
-                _buildNavItem(Icons.dashboard, "DASH", 0, colors, isDark),
-                _buildNavItem(Icons.checklist, "APPROVE", 1, colors, isDark),
-                _buildNavItem(Icons.account_balance, "PAY", 2, colors, isDark),
-                _buildNavItem(Icons.people, "VIEW FAC", 3, colors, isDark),
-                _buildNavItem(Icons.person_add, "ADD FAC", 4, colors, isDark),
-                _buildNavItem(Icons.receipt_long, "REPORTS", 5, colors, isDark),
-                _buildNavItem(Icons.person, "PROFILE", 6, colors, isDark),
-              ],
-            ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            children: [
+              _buildNavItem(Icons.home, "HOME", 0, colors, isDark),
+              _buildNavItem(Icons.edit_document, "LOG", 1, colors, isDark),
+              _buildNavItem(Icons.account_balance_wallet, "PAY", 2, colors, isDark),
+              _buildNavItem(Icons.person, "PROFILE", 3, colors, isDark),
+            ],
           ),
         ),
       ),
@@ -327,7 +280,7 @@ class _AdminBaseWrapperState extends State<AdminBaseWrapper> {
 
   Widget _buildNavItem(IconData icon, String label, int index, AppColors colors, bool isDark) {
     bool isActive = _currentNavIndex == index;
-    final color = isActive ? colors.primary : (isDark ? Colors.white.withValues(alpha: 0.4) : colors.textMuted);
+    final color = isActive ? colors.primary : (isDark ? Colors.white.withValues(alpha: 0.4) : colors.textMuted); // ✅ DYNAMIC
     return GestureDetector(
       onTap: () => _onTabTapped(index), // ✅ 4. Use the new tap function
       child: Container(

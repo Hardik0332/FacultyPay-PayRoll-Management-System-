@@ -1,3 +1,5 @@
+import 'package:animations/animations.dart';
+import 'package:animated_theme_switcher/animated_theme_switcher.dart';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -5,6 +7,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:image_picker/image_picker.dart';
 import 'notifications_page.dart';
 import '../../widgets/notification_badge.dart';
+import '../../theme/theme_manager.dart';
 
 class FacultyProfilePage extends StatefulWidget {
   const FacultyProfilePage({super.key});
@@ -14,9 +17,6 @@ class FacultyProfilePage extends StatefulWidget {
 }
 
 class _FacultyProfilePageState extends State<FacultyProfilePage> {
-  final Color primaryRed = const Color(0xFFE05B5C);
-  final Color successGreen = const Color(0xFF4CAF50);
-
   // --- FIREBASE STATE & CONTROLLERS ---
   final User? currentUser = FirebaseAuth.instance.currentUser;
   final TextEditingController nameController = TextEditingController();
@@ -61,15 +61,18 @@ class _FacultyProfilePageState extends State<FacultyProfilePage> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error loading profile: $e"), backgroundColor: primaryRed));
+        final colors = ThemeManager.instance.colors;
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error loading profile: $e"), backgroundColor: colors.error));
       }
       setState(() => isLoading = false);
     }
   }
 
   Future<void> _updateProfile() async {
+    final colors = ThemeManager.instance.colors;
+
     if (nameController.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: const Text("Name cannot be empty"), backgroundColor: primaryRed));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: const Text("Name cannot be empty"), backgroundColor: colors.error));
       return;
     }
 
@@ -82,11 +85,11 @@ class _FacultyProfilePageState extends State<FacultyProfilePage> {
       });
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: const Text("Profile updated successfully!"), backgroundColor: successGreen));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: const Text("Profile updated successfully!"), backgroundColor: colors.success));
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error updating profile: $e"), backgroundColor: primaryRed));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error updating profile: $e"), backgroundColor: colors.error));
       }
     } finally {
       if (mounted) setState(() => isSaving = false);
@@ -94,6 +97,7 @@ class _FacultyProfilePageState extends State<FacultyProfilePage> {
   }
 
   Future<void> _pickImage() async {
+    final colors = ThemeManager.instance.colors;
     try {
       final XFile? image = await _picker.pickImage(
         source: ImageSource.gallery,
@@ -114,34 +118,78 @@ class _FacultyProfilePageState extends State<FacultyProfilePage> {
         });
 
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: const Text("Profile picture updated!"), backgroundColor: successGreen));
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: const Text("Profile picture updated!"), backgroundColor: colors.success));
         }
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error picking image: $e"), backgroundColor: primaryRed));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error picking image: $e"), backgroundColor: colors.error));
+      }
+    }
+  }
+
+  // --- PASSWORD RESET LOGIC ---
+  Future<void> _sendPasswordReset() async {
+    final colors = ThemeManager.instance.colors;
+
+    if (email.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: const Text("Email address not found."), backgroundColor: colors.error));
+      return;
+    }
+
+    bool? confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: colors.card,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Text("Reset Password", style: TextStyle(color: colors.textMain, fontWeight: FontWeight.bold)),
+        content: Text("We will send a secure password reset link to $email.", style: TextStyle(color: colors.textMuted)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: Text("Cancel", style: TextStyle(color: colors.textMuted)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: Text("Send Email", style: TextStyle(color: colors.primary, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      try {
+        await FirebaseAuth.instance.sendPasswordResetEmail(email: email);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Password reset email sent to $email!"), backgroundColor: colors.success));
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: $e"), backgroundColor: colors.error));
+        }
       }
     }
   }
 
   // --- LOGOUT LOGIC ---
   Future<void> _logout() async {
-    // Show confirmation dialog before logging out
+    final colors = ThemeManager.instance.colors;
+
     bool? confirm = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF2A2E39),
+        backgroundColor: colors.card,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text("Log Out", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-        content: Text("Are you sure you want to log out of FacultyPay?", style: TextStyle(color: Colors.white.withValues(alpha: 0.7))),
+        title: Text("Log Out", style: TextStyle(color: colors.textMain, fontWeight: FontWeight.bold)),
+        content: Text("Are you sure you want to log out of FacultyPay?", style: TextStyle(color: colors.textMuted)),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: Text("Cancel", style: TextStyle(color: Colors.white.withValues(alpha: 0.5))),
+            child: Text("Cancel", style: TextStyle(color: colors.textMuted)),
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
-            child: Text("Log Out", style: TextStyle(color: primaryRed, fontWeight: FontWeight.bold)),
+            child: Text("Log Out", style: TextStyle(color: colors.error, fontWeight: FontWeight.bold)),
           ),
         ],
       ),
@@ -150,7 +198,6 @@ class _FacultyProfilePageState extends State<FacultyProfilePage> {
     if (confirm == true) {
       await FirebaseAuth.instance.signOut();
       if (mounted) {
-        // Replace '/login' with the actual route name of your Login Screen
         Navigator.of(context).pushNamedAndRemoveUntil('/login', (route) => false);
       }
     }
@@ -158,127 +205,192 @@ class _FacultyProfilePageState extends State<FacultyProfilePage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFF282C37),
-      body: Stack(
-        children: [
-          // 1. Background Gradient
-          Container(
-            decoration: const BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [Color(0xFF3B4154), Color(0xFF1E212A)],
-              ),
-            ),
-          ),
+    return AnimatedBuilder(
+        animation: ThemeManager.instance,
+        builder: (context, child) {
+          final colors = ThemeManager.instance.colors;
+          final isDark = ThemeManager.instance.isDarkMode;
 
-          // 2. Main Content
-          SafeArea(
-            bottom: false,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
-                  child: _buildHeader(),
+          return Stack(
+            children: [
+              // 1. Background Gradient
+              Container(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [colors.bgTop, colors.bgBottom],
+                  ),
                 ),
+              ),
 
-                // --- THE PROFILE CARD ---
-                Expanded(
-                  child: Container(
-                    width: double.infinity,
-                    margin: const EdgeInsets.only(top: 10),
-                    decoration: const BoxDecoration(
-                      color: Color(0xFF242832),
-                      borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
-                    ),
-                    child: isLoading
-                        ? Center(child: CircularProgressIndicator(color: primaryRed))
-                        : SingleChildScrollView(
+              // 2. Main Content
+              SafeArea(
+                bottom: false,
+                child: Center(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 800),
+                    child: SingleChildScrollView(
                       physics: const BouncingScrollPhysics(),
-                      padding: const EdgeInsets.only(top: 32, left: 20, right: 20, bottom: 120),
                       child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          // Avatar Hero Section
-                          _buildAvatarSection(),
-                          const SizedBox(height: 40),
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
+                          child: _buildHeader(colors, isDark),
+                        ),
 
-                          // Editable Details
-                          const Text("Editable Details", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white)),
-                          const SizedBox(height: 16),
-                          _buildEditableField("Full Name", Icons.person_outline, nameController),
-                          const SizedBox(height: 16),
-                          _buildEditableField("UPI ID (For Payments)", Icons.qr_code, upiController),
+                        // --- THE PROFILE CARD ---
+                        Container(
+                            width: double.infinity,
+                            margin: const EdgeInsets.only(top: 10),
+                            decoration: BoxDecoration(
+                              color: colors.card,
+                              borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
+                              boxShadow: isDark ? [] : [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 20, offset: const Offset(0, -5))],
+                            ),
+                            child: isLoading
+                                ? Center(child: CircularProgressIndicator(color: colors.primary))
+                                : Padding(
+                              padding: const EdgeInsets.only(top: 32, left: 20, right: 20, bottom: 120),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  // Avatar Hero Section
+                                  _buildAvatarSection(colors, isDark),
+                                  const SizedBox(height: 40),
 
-                          const SizedBox(height: 40),
-                          Container(height: 1, color: Colors.white.withValues(alpha: 0.1)),
-                          const SizedBox(height: 30),
+                                  // Editable Details
+                                  Text("Editable Details", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: colors.textMain)),
+                                  const SizedBox(height: 16),
+                                  _buildEditableField("Full Name", Icons.person_outline, nameController, colors, isDark),
+                                  const SizedBox(height: 16),
+                                  _buildEditableField("UPI ID (For Payments)", Icons.qr_code, upiController, colors, isDark),
 
-                          // Read-Only College Details
-                          Row(
-                            children: [
-                              const Text("College Details", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white)),
-                              const SizedBox(width: 8),
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(8)),
-                                child: Text("LOCKED", style: TextStyle(color: Colors.white.withValues(alpha: 0.5), fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1)),
-                              )
-                            ],
+                                  const SizedBox(height: 40),
+                                  Container(height: 1, color: colors.textMain.withValues(alpha: 0.1)),
+                                  const SizedBox(height: 30),
+
+                                  // Read-Only College Details
+                                  Row(
+                                    children: [
+                                      Text("College Details", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: colors.textMain)),
+                                      const SizedBox(width: 8),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                        decoration: BoxDecoration(color: colors.textMain.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(8)),
+                                        child: Text("LOCKED", style: TextStyle(color: colors.textMuted, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1)),
+                                      )
+                                    ],
+                                  ),
+                                  const SizedBox(height: 16),
+                                  _buildReadOnlyField("Email Address", email, Icons.email_outlined, colors, isDark),
+                                  const SizedBox(height: 16),
+
+                                  // Side-by-side Read-Only fields
+                                  Row(
+                                    children: [
+                                      Expanded(child: _buildReadOnlyField("Department", department.toUpperCase(), Icons.business, colors, isDark)),
+                                      const SizedBox(width: 16),
+                                      Expanded(child: _buildReadOnlyField("Hourly Rate", "₹${hourlyRate.toStringAsFixed(2)} / hr", Icons.payments_outlined, colors, isDark)),
+                                    ],
+                                  ),
+
+                                  const SizedBox(height: 40),
+
+                                  // Buttons Area
+                                  _buildSaveButton(colors),
+                                  const SizedBox(height: 16),
+                                  _buildResetPasswordButton(colors, isDark),
+                                  const SizedBox(height: 16),
+                                  _buildLogoutButton(colors),
+                                ],
+                              ),
+                            ),
                           ),
-                          const SizedBox(height: 16),
-                          _buildReadOnlyField("Email Address", email, Icons.email_outlined),
-                          const SizedBox(height: 16),
-
-                          // Side-by-side Read-Only fields
-                          Row(
-                            children: [
-                              Expanded(child: _buildReadOnlyField("Department", department.toUpperCase(), Icons.business)),
-                              const SizedBox(width: 16),
-                              Expanded(child: _buildReadOnlyField("Hourly Rate", "₹${hourlyRate.toStringAsFixed(2)} / hr", Icons.payments_outlined)),
-                            ],
-                          ),
-
-                          const SizedBox(height: 40),
-
-                          // Buttons Area
-                          _buildSaveButton(),
-                          const SizedBox(height: 16),
-                          _buildLogoutButton(), // <-- New Logout Button added here
                         ],
                       ),
                     ),
                   ),
                 ),
-              ],
-            ),
-          ),
-
-          // Floating Bottom Navigation handled by wrapper
-        ],
-      ),
+              ),
+            ],
+          );
+        }
     );
   }
 
-  Widget _buildHeader() {
+  Widget _buildHeader(AppColors colors, bool isDark) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Expanded(child: Text("My Profile", style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold, color: Colors.white, letterSpacing: -0.5), overflow: TextOverflow.ellipsis)),
+        Expanded(child: Text("My Profile", style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold, color: colors.textMain, letterSpacing: -0.5), overflow: TextOverflow.ellipsis)),
         Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // ---> CLICKABLE NOTIFICATION BUTTON <---
-            const NotificationBadge(),
+            // Theme Toggle
+            // Theme Toggle
+            ThemeSwitcher(
+              clipper: const ThemeSwitcherCircleClipper(),
+              builder: (context) {
+                return GestureDetector(
+                  onTap: () {
+                    ThemeManager.instance.toggleTheme();
+                    final newColors = ThemeManager.instance.colors;
+                    final newIsDark = ThemeManager.instance.isDarkMode;
+                    ThemeSwitcher.of(context).changeTheme(
+                      theme: ThemeData(
+                        brightness: newIsDark ? Brightness.dark : Brightness.light,
+                        primaryColor: newColors.primary,
+                        scaffoldBackgroundColor: newIsDark ? Colors.black : newColors.bgBottom,
+                        cardColor: newColors.card,
+                        appBarTheme: AppBarTheme(
+                          backgroundColor: newColors.card,
+                          foregroundColor: newColors.textMain,
+                        ),
+                        useMaterial3: false,
+                        pageTransitionsTheme: const PageTransitionsTheme(
+                          builders: {
+                            TargetPlatform.android: SharedAxisPageTransitionsBuilder(transitionType: SharedAxisTransitionType.scaled),
+                            TargetPlatform.iOS: SharedAxisPageTransitionsBuilder(transitionType: SharedAxisTransitionType.scaled),
+                            TargetPlatform.windows: SharedAxisPageTransitionsBuilder(transitionType: SharedAxisTransitionType.scaled),
+                            TargetPlatform.macOS: SharedAxisPageTransitionsBuilder(transitionType: SharedAxisTransitionType.scaled),
+                            TargetPlatform.linux: SharedAxisPageTransitionsBuilder(transitionType: SharedAxisTransitionType.scaled),
+                          },
+                        ),
+                      ),
+                    );
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: isDark ? colors.textMain.withValues(alpha: 0.1) : colors.textMuted.withValues(alpha: 0.2),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      ThemeManager.instance.currentMode == AppThemeMode.system
+                          ? Icons.brightness_auto
+                          : (ThemeManager.instance.currentMode == AppThemeMode.light ? Icons.light_mode : Icons.dark_mode_outlined),
+                      color: ThemeManager.instance.currentMode == AppThemeMode.light ? Colors.amber : colors.textMain,
+                      size: 20,
+                    ),
+                  ),
+                );
+              }
+            ),
+            const SizedBox(width: 12),
+
+            Container(
+              decoration: BoxDecoration(color: isDark ? Colors.transparent : colors.textMuted.withValues(alpha: 0.2), shape: BoxShape.circle),
+              child: const NotificationBadge(),
+            ),
           ],
         )
       ],
     );
   }
 
-  Widget _buildAvatarSection() {
+  Widget _buildAvatarSection(AppColors colors, bool isDark) {
     return Center(
       child: Column(
         children: [
@@ -289,28 +401,28 @@ class _FacultyProfilePageState extends State<FacultyProfilePage> {
               Container(
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  boxShadow: [BoxShadow(color: primaryRed.withValues(alpha: 0.3), blurRadius: 30)],
+                  boxShadow: [BoxShadow(color: colors.primary.withValues(alpha: 0.3), blurRadius: 30)],
                 ),
                 child: CircleAvatar(
                   radius: 55,
-                  backgroundColor: const Color(0xFF3B4154),
+                  backgroundColor: isDark ? const Color(0xFF3B4154) : colors.bgTop,
                   backgroundImage: avatarBase64 != null && avatarBase64!.isNotEmpty
                       ? MemoryImage(base64Decode(avatarBase64!))
                       : null,
                   child: (avatarBase64 == null || avatarBase64!.isEmpty)
-                      ? const Icon(Icons.person, size: 55, color: Colors.white)
+                      ? Icon(Icons.person, size: 55, color: colors.textMuted)
                       : null,
                 ),
               ),
-              // Camera Edit Button (Wired to Firebase)
+              // Camera Edit Button
               GestureDetector(
                 onTap: _pickImage,
                 child: Container(
                   padding: const EdgeInsets.all(10),
                   decoration: BoxDecoration(
-                    color: primaryRed,
+                    color: colors.primary,
                     shape: BoxShape.circle,
-                    border: Border.all(color: const Color(0xFF242832), width: 3),
+                    border: Border.all(color: colors.card, width: 3),
                   ),
                   child: const Icon(Icons.camera_alt, size: 16, color: Colors.white),
                 ),
@@ -318,56 +430,56 @@ class _FacultyProfilePageState extends State<FacultyProfilePage> {
             ],
           ),
           const SizedBox(height: 12),
-          Text("Tap to change picture", style: TextStyle(color: Colors.white.withValues(alpha: 0.5), fontSize: 13)),
+          Text("Tap to change picture", style: TextStyle(color: colors.textMuted, fontSize: 13)),
         ],
       ),
     );
   }
 
-  Widget _buildEditableField(String label, IconData icon, TextEditingController controller) {
+  Widget _buildEditableField(String label, IconData icon, TextEditingController controller, AppColors colors, bool isDark) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label, style: TextStyle(color: Colors.white.withValues(alpha: 0.6), fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
+        Text(label, style: TextStyle(color: colors.textMuted, fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
         const SizedBox(height: 8),
         TextFormField(
           controller: controller,
-          style: const TextStyle(color: Colors.white, fontSize: 15),
+          style: TextStyle(color: colors.textMain, fontSize: 15),
           decoration: InputDecoration(
-            prefixIcon: Icon(icon, color: Colors.white.withValues(alpha: 0.5), size: 20),
+            prefixIcon: Icon(icon, color: colors.textMuted, size: 20),
             filled: true,
-            fillColor: const Color(0xFF2A2E39),
+            fillColor: isDark ? colors.textMain.withValues(alpha: 0.03) : colors.bgTop,
             contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-            enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.05))),
-            focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide(color: primaryRed, width: 1.5)),
+            enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide(color: isDark ? colors.textMain.withValues(alpha: 0.1) : Colors.transparent)),
+            focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide(color: colors.primary, width: 1.5)),
           ),
         ),
       ],
     );
   }
 
-  Widget _buildReadOnlyField(String label, String value, IconData icon) {
+  Widget _buildReadOnlyField(String label, String value, IconData icon, AppColors colors, bool isDark) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label, style: TextStyle(color: Colors.white.withValues(alpha: 0.5), fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
+        Text(label, style: TextStyle(color: colors.textMuted, fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
         const SizedBox(height: 8),
         Container(
           width: double.infinity,
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
           decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.02),
+            color: isDark ? colors.textMain.withValues(alpha: 0.02) : colors.bgTop,
             borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
+            border: Border.all(color: isDark ? colors.textMain.withValues(alpha: 0.05) : Colors.transparent),
           ),
           child: Row(
             children: [
-              Icon(icon, size: 20, color: Colors.white.withValues(alpha: 0.3)),
+              Icon(icon, size: 20, color: colors.textMuted.withValues(alpha: 0.5)),
               const SizedBox(width: 12),
               Expanded(
-                child: Text(value, style: TextStyle(color: Colors.white.withValues(alpha: 0.5), fontWeight: FontWeight.w600, fontSize: 14), overflow: TextOverflow.ellipsis),
+                child: Text(value, style: TextStyle(color: colors.textMuted, fontWeight: FontWeight.w600, fontSize: 14), overflow: TextOverflow.ellipsis),
               ),
-              Icon(Icons.lock_outline, size: 14, color: Colors.white.withValues(alpha: 0.2)),
+              Icon(Icons.lock_outline, size: 14, color: colors.textMuted.withValues(alpha: 0.5)),
             ],
           ),
         ),
@@ -375,16 +487,16 @@ class _FacultyProfilePageState extends State<FacultyProfilePage> {
     );
   }
 
-  Widget _buildSaveButton() {
+  Widget _buildSaveButton(AppColors colors) {
     return GestureDetector(
       onTap: isSaving ? null : _updateProfile,
       child: Container(
         width: double.infinity,
         padding: const EdgeInsets.symmetric(vertical: 18),
         decoration: BoxDecoration(
-          color: isSaving ? primaryRed.withValues(alpha: 0.5) : primaryRed,
+          color: isSaving ? colors.primary.withValues(alpha: 0.5) : colors.primary,
           borderRadius: BorderRadius.circular(20),
-          boxShadow: [BoxShadow(color: primaryRed.withValues(alpha: 0.3), blurRadius: 15, offset: const Offset(0, 5))],
+          boxShadow: [BoxShadow(color: colors.primary.withValues(alpha: 0.3), blurRadius: 15, offset: const Offset(0, 5))],
         ),
         child: Center(
           child: isSaving
@@ -395,23 +507,46 @@ class _FacultyProfilePageState extends State<FacultyProfilePage> {
     );
   }
 
-  Widget _buildLogoutButton() {
+  Widget _buildResetPasswordButton(AppColors colors, bool isDark) {
+    return GestureDetector(
+      onTap: _sendPasswordReset,
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(vertical: 18),
+        decoration: BoxDecoration(
+          color: Colors.transparent,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: isDark ? colors.textMain.withValues(alpha: 0.2) : colors.textMuted.withValues(alpha: 0.3), width: 1.5),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.lock_reset, color: colors.textMain.withValues(alpha: 0.8), size: 20),
+            const SizedBox(width: 8),
+            Text("Reset Password", style: TextStyle(color: colors.textMain.withValues(alpha: 0.8), fontSize: 16, fontWeight: FontWeight.bold, letterSpacing: 1)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLogoutButton(AppColors colors) {
     return GestureDetector(
       onTap: _logout,
       child: Container(
         width: double.infinity,
         padding: const EdgeInsets.symmetric(vertical: 18),
         decoration: BoxDecoration(
-          color: Colors.transparent, // Transparent background
+          color: Colors.transparent,
           borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: primaryRed.withValues(alpha: 0.5), width: 1.5), // Subtle red outline
+          border: Border.all(color: colors.error.withValues(alpha: 0.5), width: 1.5),
         ),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.logout, color: primaryRed, size: 20),
+            Icon(Icons.logout, color: colors.error, size: 20),
             const SizedBox(width: 8),
-            Text("Log Out", style: TextStyle(color: primaryRed, fontSize: 16, fontWeight: FontWeight.bold, letterSpacing: 1)),
+            Text("Log Out", style: TextStyle(color: colors.error, fontSize: 16, fontWeight: FontWeight.bold, letterSpacing: 1)),
           ],
         ),
       ),

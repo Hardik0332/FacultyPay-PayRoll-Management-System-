@@ -1,421 +1,166 @@
+import 'package:animated_theme_switcher/animated_theme_switcher.dart';
 import 'dart:ui';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart';
-import 'notifications_page.dart';
-import '../../widgets/notification_badge.dart';
-
-import 'add_attendance_page.dart';
-import 'faculty_salary_summary_page.dart';
-import 'faculty_profile_page.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 
-class FadeIndexedStack extends StatefulWidget {
-  final int index;
-  final List<Widget> children;
-  final Duration duration;
+import '../../theme/theme_manager.dart';
+import '../../widgets/notification_badge.dart';
 
-  const FadeIndexedStack({
-    super.key,
-    required this.index,
-    required this.children,
-    this.duration = const Duration(milliseconds: 300),
-  });
-
-  @override
-  State<FadeIndexedStack> createState() => _FadeIndexedStackState();
-}
-
-class _FadeIndexedStackState extends State<FadeIndexedStack>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _controller;
-
-  @override
-  void initState() {
-    _controller = AnimationController(vsync: this, duration: widget.duration);
-    _controller.forward();
-    super.initState();
-  }
-
-  @override
-  void didUpdateWidget(FadeIndexedStack oldWidget) {
-    if (widget.index != oldWidget.index) {
-      _controller.forward(from: 0.0);
-    }
-    super.didUpdateWidget(oldWidget);
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return FadeTransition(
-      opacity: _controller,
-      child: IndexedStack(index: widget.index, children: widget.children),
-    );
-  }
-}
-
+import 'package:animations/animations.dart'; // ✅ Added morph animations
 class FacultyDashboard extends StatefulWidget {
-  const FacultyDashboard({super.key, required int initialIndex});
+  const FacultyDashboard({super.key});
 
   @override
   State<FacultyDashboard> createState() => _FacultyDashboardState();
 }
 
 class _FacultyDashboardState extends State<FacultyDashboard> {
-  int _currentNavIndex = 0;
+  final User? currentUser = FirebaseAuth.instance.currentUser;
 
-  late final List<Widget> _pages = [
-    _FacultyDashboardHomeContent(
-      onAvatarTap: () {
-        setState(() {
-          _currentNavIndex = 3;
-        });
-      },
-    ),
-    const AddAttendancePage(),
-    const FacultySalaryHistoryPage(),
-    const FacultyProfilePage(),
-  ];
+  // ✅ 1. Create variables to hold your streams
+  late Stream<DocumentSnapshot> _userStream;
+  late Stream<QuerySnapshot> _attendanceStream;
 
-  // =================================================================
-  // ✅ NEW CODE: This is exactly where the Push Notification setup goes!
-  // =================================================================
   @override
   void initState() {
     super.initState();
     _setupPushNotifications();
+
+    // ✅ 2. Initialize the streams ONCE when the page loads.
+    // Now, when the theme changes, the data stays instantly available!
+    _userStream = FirebaseFirestore.instance
+        .collection('users')
+        .doc(currentUser?.uid)
+        .snapshots();
+
+    _attendanceStream = FirebaseFirestore.instance
+        .collection('attendance')
+        .where('uid', isEqualTo: currentUser?.uid)
+        .orderBy('date', descending: true)
+        .limit(10)
+        .snapshots();
   }
 
   Future<void> _setupPushNotifications() async {
     FirebaseMessaging messaging = FirebaseMessaging.instance;
-
-    // 1. Ask the user for permission (Required for iOS and newer Androids)
     NotificationSettings settings = await messaging.requestPermission(
       alert: true,
       badge: true,
       sound: true,
     );
-
     if (settings.authorizationStatus == AuthorizationStatus.authorized) {
-      // 2. Get the unique FCM token for this specific phone
       String? token = await messaging.getToken();
-
-      if (token != null) {
-        String uid = FirebaseAuth.instance.currentUser!.uid;
-
-        // 3. Save this token to their Firestore profile so the Admin can find it!
-        await FirebaseFirestore.instance.collection('users').doc(uid).set({
-          'fcmToken': token,
-        }, SetOptions(merge: true));
+      if (token != null && currentUser != null) {
+        await FirebaseFirestore.instance
+            .collection('users')
+            .doc(currentUser!.uid)
+            .set({'fcmToken': token}, SetOptions(merge: true));
       }
     }
   }
-  // =================================================================
 
   @override
   Widget build(BuildContext context) {
-    final Color primaryRed = const Color(0xFFE05B5C);
+    // Just grab the colors normally
+    final colors = ThemeManager.instance.colors;
+    final isDark = ThemeManager.instance.isDarkMode;
 
-    return PopScope(
-      canPop: _currentNavIndex == 0,
-      onPopInvokedWithResult: (didPop, dynamic result) {
-        if (!didPop) {
-          setState(() {
-            _currentNavIndex = 0;
-          });
-        }
-      },
-      child: Scaffold(
-        backgroundColor: const Color(0xFF282C37),
-        body: Stack(
-          children: [
-            // The pages with smooth transition
-            FadeIndexedStack(index: _currentNavIndex, children: _pages),
-
-            // Floating Navigation Bar (Crystal Clear Glass)
-            Positioned(
-              bottom: 30,
-              left: 20,
-              right: 20,
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(40),
-                child: BackdropFilter(
-                  // 1. DECREASED BLUR so the background is clearer
-                  filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
-                  child: Container(
-                    height: 70,
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                        colors: [
-                          // 2. INCREASED TRANSPARENCY (almost completely clear)
-                          Colors.white.withValues(alpha: 0.03),
-                          Colors.transparent, // 0.0 alpha
-                        ],
-                      ),
-                      borderRadius: BorderRadius.circular(40),
-                      // Delicate border to define the edge of the glass
-                      border: Border.all(
-                        color: Colors.white.withValues(alpha: 0.05),
-                      ),
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                      children: [
-                        _buildNavItem(Icons.home, "HOME", 0, primaryRed),
-                        _buildNavItem(
-                          Icons.edit_document,
-                          "LOG",
-                          1,
-                          primaryRed,
-                        ),
-                        _buildNavItem(
-                          Icons.account_balance_wallet,
-                          "PAY",
-                          2,
-                          primaryRed,
-                        ),
-                        _buildNavItem(
-                          Icons.person,
-                          "MY PROFILE",
-                          3,
-                          primaryRed,
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildNavItem(
-      IconData icon,
-      String label,
-      int index,
-      Color primaryRed,
-      ) {
-    bool isActive = _currentNavIndex == index;
-    final color = isActive ? primaryRed : Colors.white.withValues(alpha: 0.4);
-    return Expanded(
-      child: GestureDetector(
-        onTap: () {
-          setState(() {
-            _currentNavIndex = index;
-          });
-        },
-        child: Container(
-          color: Colors.transparent,
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(icon, color: color, size: 24),
-              const SizedBox(height: 4),
-              Text(
-                label,
-                style: TextStyle(
-                  color: color,
-                  fontSize: 8,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 0.5,
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-              if (isActive)
-                Container(
-                  margin: const EdgeInsets.only(top: 4),
-                  height: 3,
-                  width: 20,
-                  decoration: BoxDecoration(
-                    color: primaryRed,
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-// --------------------------------------------------------
-// DASHBOARD CONTENT
-// --------------------------------------------------------
-class _FacultyDashboardHomeContent extends StatefulWidget {
-  final VoidCallback onAvatarTap;
-  const _FacultyDashboardHomeContent({required this.onAvatarTap});
-
-  @override
-  State<_FacultyDashboardHomeContent> createState() =>
-      _FacultyDashboardHomeContentState();
-}
-
-class _FacultyDashboardHomeContentState
-    extends State<_FacultyDashboardHomeContent> {
-  final Color primaryRed = const Color(0xFFE05B5C);
-  final Color successGreen = const Color(0xFF4ADE80);
-  final Color pendingOrange = const Color(0xFFFBBF24);
-  final Color verifiedBlue = const Color(0xFF60A5FA);
-
-  final User? currentUser = FirebaseAuth.instance.currentUser;
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors
-          .transparent, // Background handled by parent, but we add gradient
-      body: Stack(
-        children: [
-          // 1. Background Gradient
-          Container(
-            decoration: const BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [Color(0xFF3B4154), Color(0xFF1E212A)],
-              ),
+    return Stack(
+      children: [
+        // 1. Exact Subtle Gradient Background
+        Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [colors.bgTop, colors.bgBottom],
             ),
           ),
+        ),
 
-          // 2. FIREBASE BOUND TOP AREA (Header & Master Card)
-          StreamBuilder<DocumentSnapshot>(
-            stream: FirebaseFirestore.instance
-                .collection('users')
-                .doc(currentUser?.uid)
-                .snapshots(),
-            builder: (context, userSnap) {
-              // Default Fallbacks
-              String name = "Faculty Member";
-              String? avatarBase64;
-              double hourlyRate = 0.0;
+        // 2. Main Content
+        Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 800),
+            child: StreamBuilder<DocumentSnapshot>(
+              stream: _userStream, // ✅ 3. Use the cached stream here
+              builder: (context, userSnap) {
+                String name = "Faculty Member";
+                String? avatarBase64;
+                double hourlyRate = 0.0;
 
-              if (userSnap.hasData && userSnap.data!.exists) {
-                final data = userSnap.data!.data() as Map<String, dynamic>?;
-                if (data != null) {
-                  name = data['name'] ?? name;
-                  avatarBase64 = data['avatarBase64'];
-                  hourlyRate = (data['hourlyRate'] is int)
-                      ? (data['hourlyRate'] as int).toDouble()
-                      : (data['hourlyRate'] as double? ?? 0.0);
+                if (userSnap.hasData && userSnap.data!.exists) {
+                  final data = userSnap.data!.data() as Map<String, dynamic>?;
+                  if (data != null) {
+                    name = data['name'] ?? name;
+                    avatarBase64 = data['avatarBase64'];
+                    hourlyRate = (data['hourlyRate'] is int)
+                        ? (data['hourlyRate'] as int).toDouble()
+                        : (data['hourlyRate'] as double? ?? 0.0);
+                  }
                 }
-              }
 
-              return SafeArea(
-                bottom: false,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 20,
-                        vertical: 20,
+                return SafeArea(
+                  bottom: false,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // HEADER
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
+                        child: _buildHeader(avatarBase64, colors, isDark),
                       ),
-                      child: _buildHeader(avatarBase64),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 20),
-                      child: _buildMasterCard(name, hourlyRate),
-                    ),
-                  ],
-                ),
-              );
-            },
-          ),
 
-          // 3. THE DRAGGABLE BOTTOM SHEET (With Firebase History)
-          DraggableScrollableSheet(
-            initialChildSize: 0.58,
-            minChildSize: 0.58,
-            maxChildSize: 0.88,
-            snap: true,
-            builder: (BuildContext context, ScrollController scrollController) {
-              return Container(
-                decoration: BoxDecoration(
-                  color: const Color(0xFF242832),
-                  borderRadius: const BorderRadius.vertical(
-                    top: Radius.circular(32),
+                      // MASTER CARD
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 20),
+                        child: _buildMasterCard(name, hourlyRate, colors, isDark),
+                      ),
+
+                      const SizedBox(height: 32),
+
+                      // FLOATING TITLE
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 20),
+                        child: Text(
+                          "Recent Salary Records",
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: colors.textMain,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+
+                      // FLOATING LIST
+                      Expanded(
+                        child: ListView(
+                          padding: const EdgeInsets.only(left: 20, right: 20, bottom: 120),
+                          physics: const BouncingScrollPhysics(),
+                          children: [
+                            _buildFirebaseSalaryList(colors, isDark),
+                          ],
+                        ),
+                      ),
+                    ],
                   ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.3),
-                      blurRadius: 20,
-                      offset: const Offset(0, -5),
-                    ),
-                  ],
-                ),
-                child: Column(
-                  children: [
-                    // --- DRAG HANDLE AREA ---
-                    SingleChildScrollView(
-                      controller: scrollController,
-                      physics: const ClampingScrollPhysics(),
-                      child: Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.only(top: 16, bottom: 20),
-                        color: Colors.transparent,
-                        child: Center(
-                          child: Container(
-                            width: 40,
-                            height: 4,
-                            decoration: BoxDecoration(
-                              color: Colors.white.withValues(alpha: 0.2),
-                              borderRadius: BorderRadius.circular(2),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-
-                    // --- FIREBASE SALARY LIST ---
-                    Expanded(
-                      child: ListView(
-                        padding: const EdgeInsets.only(
-                          left: 20,
-                          right: 20,
-                          bottom: 120,
-                        ),
-                        physics: const BouncingScrollPhysics(),
-                        children: [
-                          const Text(
-                            "Recent Salary Records",
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.white,
-                              letterSpacing: 0.5,
-                            ),
-                          ),
-                          const SizedBox(height: 20),
-                          _buildFirebaseSalaryList(),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              );
-            },
+                );
+              },
+            ),
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 
-  Widget _buildHeader(String? avatarBase64) {
+  // --- UI COMPONENTS ---
+
+  Widget _buildHeader(String? avatarBase64, AppColors colors, bool isDark) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
@@ -425,7 +170,7 @@ class _FacultyDashboardHomeContentState
             style: TextStyle(
               fontSize: 26,
               fontWeight: FontWeight.bold,
-              color: Colors.white,
+              color: colors.textMain,
               letterSpacing: -0.5,
             ),
             overflow: TextOverflow.ellipsis,
@@ -434,19 +179,99 @@ class _FacultyDashboardHomeContentState
         Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // ---> CLICKABLE NOTIFICATION BUTTON <---
-            const NotificationBadge(),
+            // ✅ THEME TOGGLE
+            ThemeSwitcher(
+              clipper: const ThemeSwitcherCircleClipper(),
+              builder: (context) {
+                return GestureDetector(
+                  onTap: () {
+                    ThemeManager.instance.toggleTheme();
+                    final newColors = ThemeManager.instance.colors;
+                    final newIsDark = ThemeManager.instance.isDarkMode;
+
+                    final newTheme = ThemeData(
+                      brightness: newIsDark ? Brightness.dark : Brightness.light,
+                      primaryColor: newColors.primary,
+                      scaffoldBackgroundColor: newIsDark ? Colors.black : newColors.bgBottom,
+                      cardColor: newColors.card,
+                      appBarTheme: AppBarTheme(
+                        backgroundColor: newColors.card,
+                        foregroundColor: newColors.textMain,
+                      ),
+                      useMaterial3: false,
+                      pageTransitionsTheme: const PageTransitionsTheme(
+                        builders: {
+                          TargetPlatform.android: SharedAxisPageTransitionsBuilder(
+                            transitionType: SharedAxisTransitionType.scaled,
+                          ),
+                          TargetPlatform.iOS: SharedAxisPageTransitionsBuilder(
+                            transitionType: SharedAxisTransitionType.scaled,
+                          ),
+                          TargetPlatform.windows: SharedAxisPageTransitionsBuilder(
+                            transitionType: SharedAxisTransitionType.scaled,
+                          ),
+                          TargetPlatform.macOS: SharedAxisPageTransitionsBuilder(
+                            transitionType: SharedAxisTransitionType.scaled,
+                          ),
+                          TargetPlatform.linux: SharedAxisPageTransitionsBuilder(
+                            transitionType: SharedAxisTransitionType.scaled,
+                          ),
+                        },
+                      ),
+                    );
+
+                    ThemeSwitcher.of(context).changeTheme(theme: newTheme);
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: isDark
+                          ? colors.textMain.withValues(alpha: 0.1)
+                          : colors.textMuted.withValues(alpha: 0.2),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      ThemeManager.instance.currentMode == AppThemeMode.system
+                          ? Icons.brightness_auto
+                          : (ThemeManager.instance.currentMode == AppThemeMode.light
+                          ? Icons.light_mode
+                          : Icons.dark_mode_outlined),
+                      color: ThemeManager.instance.currentMode == AppThemeMode.light
+                          ? Colors.amber
+                          : colors.textMain,
+                      size: 20,
+                    ),
+                  ),
+                );
+              },
+            ),
             const SizedBox(width: 12),
+
+            // Notification Badge
+            Container(
+              decoration: BoxDecoration(
+                color: isDark ? Colors.transparent : colors.textMuted.withValues(alpha: 0.2),
+                shape: BoxShape.circle,
+              ),
+              child: const NotificationBadge(),
+            ),
+            const SizedBox(width: 12),
+
+            // Profile Avatar
             GestureDetector(
-              onTap: widget.onAvatarTap,
+              onTap: () => Navigator.pushReplacementNamed(context, '/faculty/profile'),
               child: CircleAvatar(
                 radius: 18,
-                backgroundColor: Colors.white.withValues(alpha: 0.15),
+                backgroundColor: isDark ? colors.textMain.withValues(alpha: 0.15) : colors.primary,
                 backgroundImage: avatarBase64 != null && avatarBase64.isNotEmpty
                     ? MemoryImage(base64Decode(avatarBase64))
                     : null,
                 child: (avatarBase64 == null || avatarBase64.isEmpty)
-                    ? const Icon(Icons.person, color: Colors.white, size: 20)
+                    ? Icon(
+                  Icons.person,
+                  color: isDark ? colors.textMain : Colors.white,
+                  size: 20,
+                )
                     : null,
               ),
             ),
@@ -456,12 +281,9 @@ class _FacultyDashboardHomeContentState
     );
   }
 
-  Widget _buildMasterCard(String name, double hourlyRate) {
+  Widget _buildMasterCard(String name, double hourlyRate, AppColors colors, bool isDark) {
     return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance
-          .collection('attendance')
-          .where('uid', isEqualTo: currentUser?.uid)
-          .snapshots(),
+      stream: _attendanceStream, // ✅ 4. Use the cached stream here
       builder: (context, snapshot) {
         int totalLectures = 0;
         int verifiedLectures = 0;
@@ -471,205 +293,128 @@ class _FacultyDashboardHomeContentState
             final data = doc.data() as Map<String, dynamic>;
             final count = data['lectures'] as int? ?? 0;
             final status = data['status'] ?? 'Pending';
-
             totalLectures += count;
             if (status == 'Verified' || status == 'Paid') {
               verifiedLectures += count;
             }
           }
         }
-
         double earnings = verifiedLectures * hourlyRate;
 
-        return ClipRRect(
-          borderRadius: BorderRadius.circular(24),
-          child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 30, sigmaY: 30),
-            child: Container(
-              padding: const EdgeInsets.all(24),
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [
-                    Colors.white.withValues(alpha: 0.2),
-                    Colors.white.withValues(alpha: 0.05),
-                  ],
-                ),
-                borderRadius: BorderRadius.circular(24),
-                border: Border.all(color: Colors.white.withValues(alpha: 0.3)),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.1),
-                    blurRadius: 20,
-                    offset: const Offset(0, 10),
-                  ),
-                ],
+        return Container(
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            color: isDark ? colors.cardHighlight : colors.card,
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(
+              color: isDark ? colors.textMain.withValues(alpha: 0.1) : Colors.transparent,
+            ),
+            boxShadow: isDark
+                ? []
+                : [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.05),
+                blurRadius: 12,
+                offset: const Offset(0, 4),
               ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          "Good Morning,",
-                          style: TextStyle(
-                            color: Colors.white.withValues(alpha: 0.7),
-                            fontSize: 13,
-                          ),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          name,
-                          style: const TextStyle(
-                            fontSize: 22,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
-                          ),
-                          overflow: TextOverflow.ellipsis,
-                          maxLines: 1,
-                        ),
-                        const SizedBox(height: 24),
-                        Text(
-                          "TOTAL EARNINGS",
-                          style: TextStyle(
-                            color: Colors.white.withValues(alpha: 0.6),
-                            fontSize: 11,
-                            fontWeight: FontWeight.bold,
-                            letterSpacing: 1,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        FittedBox(
-                          fit: BoxFit.scaleDown,
-                          alignment: Alignment.centerLeft,
-                          child: Text(
-                            "₹${earnings.toStringAsFixed(2)}",
-                            style: TextStyle(
-                              fontSize: 32,
-                              fontWeight: FontWeight.w800,
-                              color: successGreen,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 24),
-                        FittedBox(
-                          fit: BoxFit.scaleDown,
-                          alignment: Alignment.centerLeft,
-                          child: Row(
+            ],
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text("Good Morning,", style: TextStyle(color: colors.textMuted, fontSize: 13)),
+                    const SizedBox(height: 2),
+                    Text(
+                      name,
+                      style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: colors.textMain),
+                      overflow: TextOverflow.ellipsis,
+                      maxLines: 1,
+                    ),
+                    const SizedBox(height: 24),
+                    Text("TOTAL EARNINGS", style: TextStyle(color: colors.textMuted, fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 1)),
+                    const SizedBox(height: 4),
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        "₹${earnings.toStringAsFixed(2)}",
+                        style: TextStyle(fontSize: 32, fontWeight: FontWeight.w800, color: colors.primary),
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerLeft,
+                      child: Row(
+                        children: [
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    "TOTAL LECTURES",
-                                    style: TextStyle(
-                                      color: Colors.white.withValues(
-                                        alpha: 0.6,
-                                      ),
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.bold,
-                                      letterSpacing: 1,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    "$totalLectures",
-                                    style: const TextStyle(
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.bold,
-                                      color: Colors.white,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(width: 32),
-                              Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    "HOURLY RATE",
-                                    style: TextStyle(
-                                      color: Colors.white.withValues(
-                                        alpha: 0.6,
-                                      ),
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.bold,
-                                      letterSpacing: 1,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    "₹${hourlyRate.toStringAsFixed(0)}",
-                                    style: const TextStyle(
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.bold,
-                                      color: Colors.white,
-                                    ),
-                                  ),
-                                ],
-                              ),
+                              Text("TOTAL LECTURES", style: TextStyle(color: colors.textMuted, fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 1)),
+                              const SizedBox(height: 4),
+                              Text("$totalLectures", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: colors.textMain)),
                             ],
                           ),
-                        ),
-                      ],
+                          const SizedBox(width: 24),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text("HOURLY RATE", style: TextStyle(color: colors.textMuted, fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 1)),
+                              const SizedBox(height: 4),
+                              Text("₹${hourlyRate.toStringAsFixed(0)}", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: colors.textMain)),
+                            ],
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
-                  const SizedBox(width: 16),
-                  Flexible(
-                    child: Image.asset(
-                      'assets/images/bank.png',
-                      width: 100,
-                      height: 100,
-                      fit: BoxFit.contain,
-                    ),
-                  ),
-                ],
+                  ],
+                ),
               ),
-            ),
+              const SizedBox(width: 12),
+              Container(
+                width: 90,
+                alignment: Alignment.bottomRight,
+                child: Image.asset(
+                  isDark ? 'assets/images/bank.png' : 'assets/images/bank_light.png',
+                  fit: BoxFit.contain,
+                ),
+              ),
+            ],
           ),
         );
       },
     );
   }
 
-  Widget _buildFirebaseSalaryList() {
+  Widget _buildFirebaseSalaryList(AppColors colors, bool isDark) {
     return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance
-          .collection('attendance')
-          .where('uid', isEqualTo: currentUser?.uid)
-          .orderBy('date', descending: true)
-          .limit(10)
-          .snapshots(),
+      stream: _attendanceStream, // ✅ 5. Use the cached stream here
       builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return Center(child: CircularProgressIndicator(color: primaryRed));
+        // Now it won't hit this waiting state when changing themes!
+        if (snapshot.connectionState == ConnectionState.waiting && !snapshot.hasData) {
+          return Center(child: CircularProgressIndicator(color: colors.primary));
         }
-
         if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
           return Padding(
             padding: const EdgeInsets.symmetric(vertical: 40),
-            child: Center(
-              child: Text(
-                "No attendance records found.",
-                style: TextStyle(color: Colors.white.withValues(alpha: 0.5)),
-              ),
-            ),
+            child: Center(child: Text("No records found.", style: TextStyle(color: colors.textMuted))),
           );
         }
 
         return Stack(
           children: [
             Positioned(
-              left: 35,
+              left: 36,
               top: 30,
               bottom: 30,
               child: Container(
-                width: 1.5,
-                color: Colors.white.withValues(alpha: 0.1),
+                width: 2,
+                color: isDark ? colors.textMain.withValues(alpha: 0.1) : const Color(0xFF2F6B4F),
               ),
             ),
             Column(
@@ -680,15 +425,21 @@ class _FacultyDashboardHomeContentState
                 int lecturesCount = data['lectures'] ?? 0;
                 String subject = data['subject'] ?? 'Unknown';
 
-                Color statusColor = pendingOrange;
+                Color textColor = colors.warning;
+                Color bgColor = colors.warningBg;
                 IconData icon = Icons.pending_actions;
 
-                if (status.toLowerCase() == 'paid') {
-                  statusColor = successGreen;
+                if (status.toLowerCase() == 'paid' || status.toLowerCase() == 'verified') {
+                  textColor = colors.success;
+                  bgColor = colors.successBg;
                   icon = Icons.check_circle;
-                } else if (status.toLowerCase() == 'verified') {
-                  statusColor = verifiedBlue;
-                  icon = Icons.verified;
+                } else if (status.toLowerCase() == 'rejected') {
+                  textColor = colors.error;
+                  bgColor = colors.error.withValues(alpha: 0.1);
+                  icon = Icons.error;
+                } else {
+                  textColor = colors.processing;
+                  bgColor = colors.processingBg;
                 }
 
                 return _buildSalaryItem(
@@ -696,7 +447,10 @@ class _FacultyDashboardHomeContentState
                   DateFormat('MMM dd, yyyy').format(date),
                   "$lecturesCount Lecture(s) • $subject",
                   status.toUpperCase(),
-                  statusColor,
+                  textColor,
+                  bgColor,
+                  colors,
+                  isDark,
                 );
               }).toList(),
             ),
@@ -706,74 +460,53 @@ class _FacultyDashboardHomeContentState
     );
   }
 
-  Widget _buildSalaryItem(
-      IconData icon,
-      String title,
-      String details,
-      String status,
-      Color statusColor,
-      ) {
+  Widget _buildSalaryItem(IconData icon, String title, String details, String status, Color textColor, Color bgColor, AppColors colors, bool isDark) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.only(bottom: 16),
       child: Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: const Color(0xFF2A2E39),
+          color: colors.card,
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
+          border: Border.all(
+            color: isDark ? colors.textMain.withValues(alpha: 0.05) : Colors.transparent,
+          ),
+          boxShadow: isDark
+              ? []
+              : [
+            BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 12, offset: const Offset(0, 4)),
+          ],
         ),
         child: Row(
           children: [
             Container(
               width: 42,
               height: 42,
-              decoration: const BoxDecoration(
-                color: Color(0xFF4A5060),
+              decoration: BoxDecoration(
+                color: isDark ? colors.textMain.withValues(alpha: 0.1) : colors.primary,
                 shape: BoxShape.circle,
               ),
-              child: Icon(icon, color: Colors.white, size: 20),
+              child: Icon(icon, color: isDark ? colors.textMain : Colors.white, size: 20),
             ),
             const SizedBox(width: 16),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    title,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
+                  Text(title, style: TextStyle(color: colors.textMain, fontSize: 16, fontWeight: FontWeight.w600)),
                   const SizedBox(height: 4),
-                  Text(
-                    details,
-                    style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.6),
-                      fontSize: 13,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
+                  Text(details, style: TextStyle(color: colors.textMuted, fontSize: 13, fontWeight: FontWeight.w500)),
                 ],
               ),
             ),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
               decoration: BoxDecoration(
-                color: statusColor.withValues(alpha: 0.1),
+                color: bgColor,
                 borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: statusColor.withValues(alpha: 0.3)),
+                border: Border.all(color: isDark ? textColor.withValues(alpha: 0.3) : Colors.transparent),
               ),
-              child: Text(
-                status,
-                style: TextStyle(
-                  color: statusColor,
-                  fontSize: 10,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: 1,
-                ),
-              ),
+              child: Text(status, style: TextStyle(color: textColor, fontSize: 10, fontWeight: FontWeight.w800, letterSpacing: 1)),
             ),
           ],
         ),

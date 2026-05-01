@@ -3,7 +3,10 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:firebase_messaging/firebase_messaging.dart';
+
+import '../../theme/theme_manager.dart'; // ✅ IMPORT THE THEME MANAGER
+import 'package:animated_theme_switcher/animated_theme_switcher.dart';
+import 'package:animations/animations.dart';
 
 class AdminDashboard extends StatefulWidget {
   const AdminDashboard({super.key});
@@ -14,76 +17,85 @@ class AdminDashboard extends StatefulWidget {
 
 class _AdminDashboardState extends State<AdminDashboard> {
   final Color primaryRed = const Color(0xFFE05B5C);
-  final Color successGreen = const Color(0xFF4ADE80);
-  final Color pendingOrange = const Color(0xFFFBBF24);
-  final Color verifiedBlue = const Color(0xFF60A5FA);
-
   @override
   Widget build(BuildContext context) {
-    return Stack( // ✅ ADDED: Stack to hold the gradient and content
-      children: [
-        // ✅ ADDED: Restored the beautiful Background Gradient
-        Container(
-          decoration: const BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: [Color(0xFF3B4154), Color(0xFF1E212A)],
-            ),
-          ),
-        ),
+    // ✅ WRAP IN ANIMATED BUILDER
+    return AnimatedBuilder(
+      animation: ThemeManager.instance,
+      builder: (context, child) {
+        final colors = ThemeManager.instance.colors;
+        final isDark = ThemeManager.instance.isDarkMode;
 
-        // Main Scrollable Content
-        SafeArea(
-          bottom: false,
-          child: RefreshIndicator(
-            color: primaryRed,
-            backgroundColor: const Color(0xFF242832),
-            onRefresh: () async {
-              await Future.delayed(const Duration(milliseconds: 1200));
-              setState(() {}); // Force rebuild streams
-            },
-            child: SingleChildScrollView(
-              physics: const AlwaysScrollableScrollPhysics(),
-              // ✅ ADDED: 120px bottom padding so content isn't hidden behind the floating nav
-              padding: const EdgeInsets.only(bottom: 120),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
-                    child: _buildHeader(context),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 20),
-                    child: _buildMasterCard(),
-                  ),
-                  const SizedBox(height: 32),
-
-                  // Quick Actions Title
-                  const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 20),
-                    child: Text("Quick Actions", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white, letterSpacing: 0.5)),
-                  ),
-                  const SizedBox(height: 16),
-
-                  // Vertical List of Actions (Long Rectangles)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 20),
-                    child: _buildQuickActionsList(context),
-                  ),
-                ],
+        return Stack(
+          children: [
+            // Background Gradient
+            Container(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [colors.bgTop, colors.bgBottom],
+                ),
               ),
             ),
-          ),
-        ),
-      ],
+
+            // Main Scrollable Content
+            SafeArea(
+              bottom: false,
+              child: RefreshIndicator(
+                color: colors.primary,
+                backgroundColor: colors.card,
+                onRefresh: () async {
+                  await Future.delayed(const Duration(milliseconds: 1200));
+                  setState(() {});
+                },
+                child: Center(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 800),
+                    child: SingleChildScrollView(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      padding: const EdgeInsets.only(bottom: 120),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
+                            child: _buildHeader(context, colors, isDark),
+                          ),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 20),
+                            child: _buildMasterCard(colors, isDark),
+                          ),
+                          const SizedBox(height: 32),
+
+                          // Quick Actions Title
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 20),
+                            child: Text("Quick Actions", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: colors.textMain, letterSpacing: 0.5)),
+                          ),
+                          const SizedBox(height: 16),
+
+                          // Vertical List of Actions
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 20),
+                            child: _buildQuickActionsList(context, colors, isDark),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 
   // --- UI COMPONENTS & LOGIC MAPPINGS ---
 
-  Widget _buildHeader(BuildContext context) {
+  Widget _buildHeader(BuildContext context, AppColors colors, bool isDark) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
@@ -93,18 +105,78 @@ class _AdminDashboardState extends State<AdminDashboard> {
             children: [
               Text("Admin Portal", style: TextStyle(color: primaryRed, fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 1.5)),
               const SizedBox(height: 2),
-              const Text("Command Center", style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold, color: Colors.white, letterSpacing: -0.5), overflow: TextOverflow.ellipsis),
+              Text("Command Center", style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold, color: colors.textMain, letterSpacing: -0.5), overflow: TextOverflow.ellipsis),
             ],
           ),
         ),
         Row(
           mainAxisSize: MainAxisSize.min,
           children: [
+            // ✅ THEME TOGGLE SWITCH
+            ThemeSwitcher(
+              clipper: const ThemeSwitcherCircleClipper(),
+              builder: (context) {
+                return GestureDetector(
+                  onTap: () {
+                    ThemeManager.instance.toggleTheme();
+                    final newColors = ThemeManager.instance.colors;
+                    final newIsDark = ThemeManager.instance.isDarkMode;
+                    ThemeSwitcher.of(context).changeTheme(
+                      theme: ThemeData(
+                        brightness: newIsDark ? Brightness.dark : Brightness.light,
+                        primaryColor: newColors.primary,
+                        scaffoldBackgroundColor: newIsDark ? Colors.black : newColors.bgBottom,
+                        cardColor: newColors.card,
+                        appBarTheme: AppBarTheme(backgroundColor: newColors.card, foregroundColor: newColors.textMain),
+                        useMaterial3: false,
+                        pageTransitionsTheme: const PageTransitionsTheme(
+                          builders: {
+                            TargetPlatform.android: SharedAxisPageTransitionsBuilder(transitionType: SharedAxisTransitionType.scaled),
+                            TargetPlatform.iOS: SharedAxisPageTransitionsBuilder(transitionType: SharedAxisTransitionType.scaled),
+                            TargetPlatform.windows: SharedAxisPageTransitionsBuilder(transitionType: SharedAxisTransitionType.scaled),
+                            TargetPlatform.macOS: SharedAxisPageTransitionsBuilder(transitionType: SharedAxisTransitionType.scaled),
+                            TargetPlatform.linux: SharedAxisPageTransitionsBuilder(transitionType: SharedAxisTransitionType.scaled),
+                          },
+                        ),
+                      ),
+                    );
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: isDark ? colors.textMain.withValues(alpha: 0.1) : colors.textMuted.withValues(alpha: 0.2),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      ThemeManager.instance.currentMode == AppThemeMode.system
+                          ? Icons.brightness_auto
+                          : (ThemeManager.instance.currentMode == AppThemeMode.light ? Icons.light_mode : Icons.dark_mode_outlined),
+                      color: ThemeManager.instance.currentMode == AppThemeMode.light ? Colors.amber : colors.textMain,
+                      size: 20,
+                    ),
+                  ),
+                );
+              }
+            ),
+            const SizedBox(width: 12),
+
+            // SEARCH BUTTON
             GestureDetector(
-              onTap: () {
-                showSearch(context: context, delegate: FacultySearchDelegate());
+              onTap: () async {
+                final String? selectedUid = await showDialog<String>(
+                  context: context,
+                  builder: (context) => const FacultySearchDialog(),
+                );
+
+                if (selectedUid != null && context.mounted) {
+                  Navigator.pushReplacementNamed(context, '/admin/view-faculty');
+                }
               },
-              child: Container(padding: const EdgeInsets.all(8), decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.15), shape: BoxShape.circle), child: const Icon(Icons.search, color: Colors.white, size: 20)),
+              child: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(color: isDark ? colors.textMain.withValues(alpha: 0.15) : colors.primary.withValues(alpha: 0.1), shape: BoxShape.circle),
+                  child: Icon(Icons.search, color: isDark ? Colors.white : colors.primary, size: 20)
+              ),
             ),
             const SizedBox(width: 12),
 
@@ -123,9 +195,9 @@ class _AdminDashboardState extends State<AdminDashboard> {
                     },
                     child: CircleAvatar(
                       radius: 18,
-                      backgroundColor: Colors.white.withValues(alpha: 0.15),
+                      backgroundColor: isDark ? colors.textMain.withValues(alpha: 0.15) : colors.primary,
                       backgroundImage: avatarBase64 != null && avatarBase64.isNotEmpty ? MemoryImage(base64Decode(avatarBase64)) : null,
-                      child: (avatarBase64 == null || avatarBase64.isEmpty) ? const Icon(Icons.person, color: Colors.white, size: 20) : null,
+                      child: (avatarBase64 == null || avatarBase64.isEmpty) ? Icon(Icons.person, color: isDark ? colors.textMain : Colors.white, size: 20) : null,
                     ),
                   );
                 }
@@ -136,143 +208,137 @@ class _AdminDashboardState extends State<AdminDashboard> {
     );
   }
 
-  Widget _buildMasterCard() {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(24),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 30, sigmaY: 30),
-        child: Container(
-          padding: const EdgeInsets.all(24),
-          decoration: BoxDecoration(
-            gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [Colors.white.withValues(alpha: 0.2), Colors.white.withValues(alpha: 0.05)]),
-            borderRadius: BorderRadius.circular(24),
-            border: Border.all(color: primaryRed.withValues(alpha: 0.3)), // Subtle red border for Admin
-            boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.1), blurRadius: 20, offset: const Offset(0, 10))],
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text("CURRENT MONTH LIABILITY", style: TextStyle(color: Colors.white.withValues(alpha: 0.6), fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 1)),
-              const SizedBox(height: 4),
+  Widget _buildMasterCard(AppColors colors, bool isDark) {
+    return Container(
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: colors.cardHighlight,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: isDark ? colors.textMain.withValues(alpha: 0.1) : Colors.transparent),
+        boxShadow: isDark ? [] : [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 12, offset: const Offset(0, 4))],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text("CURRENT MONTH LIABILITY", style: TextStyle(color: colors.textMuted, fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 1)),
+          const SizedBox(height: 4),
 
-              StreamBuilder<QuerySnapshot>(
-                stream: FirebaseFirestore.instance.collection('attendance').where('status', isEqualTo: 'Verified').snapshots(),
-                builder: (context, attendanceSnap) {
-                  if (!attendanceSnap.hasData) return const Text("₹...", style: TextStyle(fontSize: 32, fontWeight: FontWeight.w800, color: Colors.white));
+          StreamBuilder<QuerySnapshot>(
+            stream: FirebaseFirestore.instance.collection('attendance').where('status', isEqualTo: 'Verified').snapshots(),
+            builder: (context, attendanceSnap) {
+              if (!attendanceSnap.hasData) return Text("₹...", style: TextStyle(fontSize: 32, fontWeight: FontWeight.w800, color: primaryRed));
 
-                  Map<String, int> pendingLecturesPerUser = {};
-                  for (var doc in attendanceSnap.data!.docs) {
-                    String uid = doc['uid'];
-                    int lectures = doc['lectures'];
-                    pendingLecturesPerUser[uid] = (pendingLecturesPerUser[uid] ?? 0) + lectures;
-                  }
+              Map<String, int> pendingLecturesPerUser = {};
+              for (var doc in attendanceSnap.data!.docs) {
+                String uid = doc['uid'];
+                int lectures = doc['lectures'];
+                pendingLecturesPerUser[uid] = (pendingLecturesPerUser[uid] ?? 0) + lectures;
+              }
 
-                  return FutureBuilder<QuerySnapshot>(
-                    future: FirebaseFirestore.instance.collection('users').where('role', isEqualTo: 'faculty').get(),
-                    builder: (context, usersSnap) {
-                      double totalPendingAmount = 0.0;
-                      if (usersSnap.hasData) {
-                        for (var userDoc in usersSnap.data!.docs) {
-                          String uid = userDoc.id;
-                          if (pendingLecturesPerUser.containsKey(uid)) {
-                            var rawRate = userDoc['hourlyRate'];
-                            double rate = (rawRate is int) ? rawRate.toDouble() : (rawRate as double? ?? 0.0);
-                            totalPendingAmount += pendingLecturesPerUser[uid]! * rate;
-                          }
-                        }
+              return FutureBuilder<QuerySnapshot>(
+                future: FirebaseFirestore.instance.collection('users').where('role', isEqualTo: 'faculty').get(),
+                builder: (context, usersSnap) {
+                  double totalPendingAmount = 0.0;
+                  if (usersSnap.hasData) {
+                    for (var userDoc in usersSnap.data!.docs) {
+                      String uid = userDoc.id;
+                      if (pendingLecturesPerUser.containsKey(uid)) {
+                        var rawRate = userDoc['hourlyRate'];
+                        double rate = (rawRate is int) ? rawRate.toDouble() : (rawRate as double? ?? 0.0);
+                        totalPendingAmount += pendingLecturesPerUser[uid]! * rate;
                       }
-                      return FittedBox(
-                        fit: BoxFit.scaleDown,
-                        alignment: Alignment.centerLeft,
-                        child: Text("₹${totalPendingAmount.toStringAsFixed(2)}", style: const TextStyle(fontSize: 32, fontWeight: FontWeight.w800, color: Colors.white)),
-                      );
-                    },
+                    }
+                  }
+                  return FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerLeft,
+                    child: Text("₹${totalPendingAmount.toStringAsFixed(2)}", style: TextStyle(fontSize: 32, fontWeight: FontWeight.w800, color: colors.primary)),
                   );
                 },
+              );
+            },
+          ),
+
+          const SizedBox(height: 24),
+
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text("ACTIVE FACULTY", style: TextStyle(color: colors.textMuted, fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 1)),
+                    const SizedBox(height: 4),
+                    StreamBuilder<QuerySnapshot>(
+                        stream: FirebaseFirestore.instance.collection('users').where('role', isEqualTo: 'faculty').snapshots(),
+                        builder: (context, snapshot) {
+                          String count = snapshot.hasData ? snapshot.data!.docs.length.toString() : "...";
+                          return Text(count, style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: colors.textMain));
+                        }
+                    ),
+                  ],
+                ),
               ),
-
-              const SizedBox(height: 24),
-
-              Row(
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text("ACTIVE FACULTY", style: TextStyle(color: Colors.white.withValues(alpha: 0.6), fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 1)),
-                        const SizedBox(height: 4),
-                        StreamBuilder<QuerySnapshot>(
-                            stream: FirebaseFirestore.instance.collection('users').where('role', isEqualTo: 'faculty').snapshots(),
-                            builder: (context, snapshot) {
-                              String count = snapshot.hasData ? snapshot.data!.docs.length.toString() : "...";
-                              return Text(count, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white));
-                            }
-                        ),
-                      ],
-                    ),
-                  ),
-                  Container(width: 1, height: 30, color: Colors.white.withValues(alpha: 0.2)),
-                  Expanded(
-                    child: Padding(
-                      padding: const EdgeInsets.only(left: 16),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text("PENDING LOGS", style: TextStyle(color: Colors.white.withValues(alpha: 0.6), fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 1)),
-                          const SizedBox(height: 4),
-                          StreamBuilder<QuerySnapshot>(
-                              stream: FirebaseFirestore.instance.collection('attendance').where('status', isEqualTo: 'Pending').snapshots(),
-                              builder: (context, snapshot) {
-                                String count = snapshot.hasData ? snapshot.data!.docs.length.toString() : "...";
-                                return Text(count, style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: pendingOrange));
-                              }
-                          ),
-                        ],
+              Container(width: 1, height: 30, color: colors.textMain.withValues(alpha: 0.1)),
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.only(left: 16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text("PENDING LOGS", style: TextStyle(color: colors.textMuted, fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 1)),
+                      const SizedBox(height: 4),
+                      StreamBuilder<QuerySnapshot>(
+                          stream: FirebaseFirestore.instance.collection('attendance').where('status', isEqualTo: 'Pending').snapshots(),
+                          builder: (context, snapshot) {
+                            String count = snapshot.hasData ? snapshot.data!.docs.length.toString() : "...";
+                            return Text(count, style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: colors.warning));
+                          }
                       ),
-                    ),
+                    ],
                   ),
-                ],
+                ),
               ),
             ],
           ),
-        ),
+        ],
       ),
     );
   }
 
   // --- EXTENDED QUICK ACTIONS LIST ---
-  Widget _buildQuickActionsList(BuildContext context) {
+  Widget _buildQuickActionsList(BuildContext context, AppColors colors, bool isDark) {
     return Column(
       children: [
         _buildActionListTile(
-            Icons.verified, "Verify Logs", "Review and approve faculty attendance", verifiedBlue,
+            Icons.verified, "Verify Logs", "Review and approve faculty attendance", colors.processing, colors, isDark,
                 () => Navigator.pushReplacementNamed(context, '/admin/view-attendance')
         ),
         _buildActionListTile(
-            Icons.account_balance, "Process Payments", "Calculate and clear verified logs", successGreen,
+            Icons.account_balance, "Process Payments", "Calculate and clear verified logs", colors.success, colors, isDark,
                 () => Navigator.pushReplacementNamed(context, '/admin/calculate-salary')
         ),
         _buildActionListTile(
-            Icons.people, "View Faculty", "See all registered faculty members", Colors.cyanAccent,
+            Icons.people, "View Faculty", "See all registered faculty members", const Color(0xFF06B6D4), colors, isDark, // Cyan variant
                 () => Navigator.pushReplacementNamed(context, '/admin/view-faculty')
         ),
         _buildActionListTile(
-            Icons.person_add, "Add Faculty", "Onboard new faculty members", Colors.purpleAccent,
+            Icons.person_add, "Add Faculty", "Onboard new faculty members", const Color(0xFFA855F7), colors, isDark, // Purple variant
                 () => Navigator.pushReplacementNamed(context, '/admin/add-faculty')
         ),
         _buildActionListTile(
-            Icons.receipt_long, "Generate Reports", "Export monthly liability and slips", Colors.orangeAccent,
+            Icons.receipt_long, "Generate Reports", "Export monthly liability and slips", colors.warning, colors, isDark,
                 () => Navigator.pushReplacementNamed(context, '/admin/reports')
         ),
         _buildActionListTile(
-            Icons.person, "My Profile", "Manage your admin account details", Colors.pinkAccent,
+            Icons.person, "My Profile", "Manage your admin account details", const Color(0xFFEC4899), colors, isDark, // Pink variant
                 () => Navigator.pushReplacementNamed(context, '/admin/profile')
         ),
       ],
     );
   }
 
-  Widget _buildActionListTile(IconData icon, String title, String subtitle, Color color, VoidCallback onTap) {
+  Widget _buildActionListTile(IconData icon, String title, String subtitle, Color accentColor, AppColors colors, bool isDark, VoidCallback onTap) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: GestureDetector(
@@ -280,148 +346,164 @@ class _AdminDashboardState extends State<AdminDashboard> {
         child: Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: const Color(0xFF2A2E39),
+            color: colors.card,
             borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
-            boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.1), blurRadius: 10, offset: const Offset(0, 4))],
+            border: Border.all(color: isDark ? colors.textMain.withValues(alpha: 0.05) : Colors.transparent),
+            boxShadow: isDark ? [] : [BoxShadow(color: Colors.black.withValues(alpha: 0.03), blurRadius: 10, offset: const Offset(0, 4))],
           ),
           child: Row(
             children: [
               Container(
                 width: 50, height: 50,
                 decoration: BoxDecoration(
-                  color: color.withValues(alpha: 0.15),
+                  color: accentColor.withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: color.withValues(alpha: 0.3)),
+                  border: Border.all(color: accentColor.withValues(alpha: 0.3)),
                 ),
-                child: Icon(icon, color: color, size: 24),
+                child: Icon(icon, color: accentColor, size: 24),
               ),
               const SizedBox(width: 16),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(title, style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+                    Text(title, style: TextStyle(color: colors.textMain, fontSize: 16, fontWeight: FontWeight.bold)),
                     const SizedBox(height: 4),
-                    Text(subtitle, style: TextStyle(color: Colors.white.withValues(alpha: 0.6), fontSize: 12, fontWeight: FontWeight.w500)),
+                    Text(subtitle, style: TextStyle(color: colors.textMuted, fontSize: 12, fontWeight: FontWeight.w500)),
                   ],
                 ),
               ),
-              Icon(Icons.arrow_forward_ios, color: Colors.white.withValues(alpha: 0.3), size: 16),
+              Icon(Icons.arrow_forward_ios, color: colors.textMuted.withValues(alpha: 0.5), size: 16),
             ],
           ),
         ),
       ),
     );
   }
-
 }
 
-class FacultySearchDelegate extends SearchDelegate<String?> {
-  @override
-  ThemeData appBarTheme(BuildContext context) {
-    return ThemeData(
-      appBarTheme: const AppBarTheme(
-        backgroundColor: Color(0xFF242832),
-        elevation: 0,
-        iconTheme: IconThemeData(color: Colors.white),
-      ),
-      scaffoldBackgroundColor: const Color(0xFF282C37),
-      textTheme: const TextTheme(
-        titleLarge: TextStyle(color: Colors.white, fontSize: 16),
-      ),
-      inputDecorationTheme: InputDecorationTheme(
-        hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.5)),
-        border: InputBorder.none,
-      ),
-    );
-  }
+// ============================================================================
+// FLOATING SEARCH DIALOG (THEMED)
+// ============================================================================
+class FacultySearchDialog extends StatefulWidget {
+  const FacultySearchDialog({super.key});
 
   @override
-  List<Widget>? buildActions(BuildContext context) {
-    return [
-      if (query.isNotEmpty)
-        IconButton(
-          icon: const Icon(Icons.clear, color: Colors.white),
-          onPressed: () {
-            query = '';
-          },
-        )
-    ];
-  }
+  State<FacultySearchDialog> createState() => _FacultySearchDialogState();
+}
+
+class _FacultySearchDialogState extends State<FacultySearchDialog> {
+  String query = '';
 
   @override
-  Widget? buildLeading(BuildContext context) {
-    return IconButton(
-      icon: const Icon(Icons.arrow_back, color: Colors.white),
-      onPressed: () {
-        close(context, null);
-      },
-    );
-  }
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+        animation: ThemeManager.instance,
+        builder: (context, child) {
+          final colors = ThemeManager.instance.colors;
+          final isDark = ThemeManager.instance.isDarkMode;
 
-  @override
-  Widget buildResults(BuildContext context) {
-    return _buildSearchResults();
-  }
+          return Dialog(
+            backgroundColor: Colors.transparent,
+            elevation: 0,
+            insetPadding: const EdgeInsets.all(20),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 600, maxHeight: 500),
+              child: Container(
+                decoration: BoxDecoration(
+                  color: colors.card,
+                  borderRadius: BorderRadius.circular(24),
+                  border: Border.all(color: isDark ? colors.textMain.withValues(alpha: 0.1) : Colors.transparent),
+                  boxShadow: isDark
+                      ? [BoxShadow(color: Colors.black.withValues(alpha: 0.3), blurRadius: 30, offset: const Offset(0, 10))]
+                      : [BoxShadow(color: Colors.black.withValues(alpha: 0.1), blurRadius: 30, offset: const Offset(0, 15))],
+                ),
+                child: Column(
+                  children: [
+                    // Search Input Bar
+                    Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: TextField(
+                        autofocus: true,
+                        style: TextStyle(color: colors.textMain, fontSize: 16),
+                        decoration: InputDecoration(
+                          hintText: "Search faculty by name or email...",
+                          hintStyle: TextStyle(color: colors.textMuted),
+                          prefixIcon: Icon(Icons.search, color: colors.textMuted),
+                          filled: true,
+                          fillColor: isDark ? colors.bgBottom : colors.bgTop,
+                          contentPadding: const EdgeInsets.symmetric(vertical: 16),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
+                        ),
+                        onChanged: (val) {
+                          setState(() {
+                            query = val;
+                          });
+                        },
+                      ),
+                    ),
 
-  @override
-  Widget buildSuggestions(BuildContext context) {
-    return _buildSearchResults();
-  }
+                    Container(height: 1, color: colors.textMain.withValues(alpha: 0.05)),
 
-  Widget _buildSearchResults() {
-    if (query.isEmpty) {
-      return Center(
-        child: Text("Search faculty by name or email...", style: TextStyle(color: Colors.white.withValues(alpha: 0.5))),
-      );
-    }
+                    // Search Results
+                    Expanded(
+                      child: query.isEmpty
+                          ? Center(
+                        child: Text("Type to search...", style: TextStyle(color: colors.textMuted, fontSize: 14)),
+                      )
+                          : StreamBuilder<QuerySnapshot>(
+                        stream: FirebaseFirestore.instance.collection('users').where('role', isEqualTo: 'faculty').snapshots(),
+                        builder: (context, snapshot) {
+                          if (!snapshot.hasData) {
+                            return Center(child: CircularProgressIndicator(color: colors.primary));
+                          }
 
-    return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance.collection('users').where('role', isEqualTo: 'faculty').snapshots(),
-      builder: (context, snapshot) {
-        if (!snapshot.hasData) {
-          return const Center(child: CircularProgressIndicator(color: Color(0xFFE05B5C)));
-        }
+                          final docs = snapshot.data!.docs.where((doc) {
+                            final data = doc.data() as Map<String, dynamic>;
+                            final name = (data['name'] ?? '').toString().toLowerCase();
+                            final email = (data['email'] ?? '').toString().toLowerCase();
+                            final q = query.toLowerCase();
+                            return name.contains(q) || email.contains(q);
+                          }).toList();
 
-        final docs = snapshot.data!.docs.where((doc) {
-          final data = doc.data() as Map<String, dynamic>;
-          final name = (data['name'] ?? '').toString().toLowerCase();
-          final email = (data['email'] ?? '').toString().toLowerCase();
-          final q = query.toLowerCase();
-          return name.contains(q) || email.contains(q);
-        }).toList();
+                          if (docs.isEmpty) {
+                            return Center(
+                              child: Text("No faculty found matching '$query'.", style: TextStyle(color: colors.textMuted)),
+                            );
+                          }
 
-        if (docs.isEmpty) {
-          return Center(
-            child: Text("No faculty found matching '$query'.", style: TextStyle(color: Colors.white.withValues(alpha: 0.5))),
+                          return ListView.builder(
+                            itemCount: docs.length,
+                            physics: const BouncingScrollPhysics(),
+                            itemBuilder: (context, index) {
+                              final data = docs[index].data() as Map<String, dynamic>;
+                              final name = data['name'] ?? 'Unknown';
+                              final email = data['email'] ?? 'No email';
+                              final avatarBase64 = data['avatarBase64'];
+
+                              return ListTile(
+                                leading: CircleAvatar(
+                                  backgroundColor: isDark ? colors.textMain.withValues(alpha: 0.15) : colors.primary.withValues(alpha: 0.1),
+                                  backgroundImage: avatarBase64 != null && avatarBase64.isNotEmpty ? MemoryImage(base64Decode(avatarBase64)) : null,
+                                  child: (avatarBase64 == null || avatarBase64.isEmpty) ? Icon(Icons.person, color: isDark ? colors.textMain : colors.primary) : null,
+                                ),
+                                title: Text(name, style: TextStyle(color: colors.textMain, fontWeight: FontWeight.bold)),
+                                subtitle: Text(email, style: TextStyle(color: colors.textMuted)),
+                                onTap: () {
+                                  Navigator.pop(context, data['uid'] ?? docs[index].id);
+                                },
+                              );
+                            },
+                          );
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
           );
         }
-
-        return ListView.builder(
-          itemCount: docs.length,
-          itemBuilder: (context, index) {
-            final data = docs[index].data() as Map<String, dynamic>;
-            final name = data['name'] ?? 'Unknown';
-            final email = data['email'] ?? 'No email';
-            final avatarBase64 = data['avatarBase64'];
-
-            return ListTile(
-              leading: CircleAvatar(
-                backgroundColor: Colors.white.withValues(alpha: 0.15),
-                backgroundImage: avatarBase64 != null && avatarBase64.isNotEmpty ? MemoryImage(base64Decode(avatarBase64)) : null,
-                child: (avatarBase64 == null || avatarBase64.isEmpty) ? const Icon(Icons.person, color: Colors.white) : null,
-              ),
-              title: Text(name, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-              subtitle: Text(email, style: TextStyle(color: Colors.white.withValues(alpha: 0.6))),
-              onTap: () {
-                // Return result or navigate
-                close(context, data['uid'] ?? docs[index].id);
-              },
-            );
-          },
-        );
-      },
     );
   }
 }

@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-// ✅ IMPORT MAIN TO ACCESS THE THEME NOTIFIER
-import '../../main.dart';
+
+// ✅ IMPORT THE NEW THEME MANAGER
+import 'package:fixed_project/theme/theme_manager.dart';
+import 'package:animated_theme_switcher/animated_theme_switcher.dart';
+import 'package:animations/animations.dart';
 
 // ==========================================
 // ADMIN SIDEBAR
@@ -13,11 +16,12 @@ class AdminSidebar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+    // Grab our custom colors so the sidebar matches the rest of the app!
+    final colors = ThemeManager.instance.colors;
 
     return Container(
       width: 250,
-      color: theme.cardColor,
+      color: colors.card, // ✅ DYNAMIC BACKGROUND
       child: Column(
         children: [
           // Logo Area
@@ -26,68 +30,90 @@ class AdminSidebar extends StatelessWidget {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(Icons.school, size: 28, color: theme.primaryColor),
+                Icon(Icons.school, size: 28, color: colors.primary), // ✅ DYNAMIC ICON
                 const SizedBox(width: 12),
-                const Text(
+                Text(
                   "FacultyPay",
-                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: colors.textMain), // ✅ DYNAMIC TEXT
                 ),
               ],
             ),
           ),
 
-          const Divider(),
+          Divider(color: colors.textMain.withValues(alpha: 0.1)),
           const SizedBox(height: 16),
 
           // Menu Items
-          _buildNavItem(context, Icons.dashboard, "Dashboard", '/admin/dashboard'),
-          _buildNavItem(context, Icons.person_add, "Add Faculty", '/admin/add-faculty'),
-          _buildNavItem(context, Icons.people, "View Faculty", '/admin/view-faculty'),
-          _buildNavItem(context, Icons.list_alt, "View Attendance", '/admin/view-attendance'),
-          _buildNavItem(context, Icons.calculate, "Calculate Salary", '/admin/calculate-salary'),
-          _buildNavItem(context, Icons.analytics, "Reports", '/admin/reports'),
-
-          // ✅ NEW: Admin Profile Button Added Here
-          _buildNavItem(context, Icons.person, "My Profile", '/admin/profile'),
+          _buildNavItem(context, Icons.dashboard, "Dashboard", '/admin/dashboard', colors),
+          _buildNavItem(context, Icons.person_add, "Add Faculty", '/admin/add-faculty', colors),
+          _buildNavItem(context, Icons.people, "View Faculty", '/admin/view-faculty', colors),
+          _buildNavItem(context, Icons.list_alt, "View Attendance", '/admin/view-attendance', colors),
+          _buildNavItem(context, Icons.calculate, "Calculate Salary", '/admin/calculate-salary', colors),
+          _buildNavItem(context, Icons.analytics, "Reports", '/admin/reports', colors),
+          _buildNavItem(context, Icons.person, "My Profile", '/admin/profile', colors),
 
           const Spacer(),
-          const Divider(),
+          Divider(color: colors.textMain.withValues(alpha: 0.1)),
 
-          // ✅ DARK MODE TOGGLE
-          ValueListenableBuilder<ThemeMode>(
-              valueListenable: themeNotifier,
-              builder: (context, currentMode, child) {
-                final isCurrentlyDark = currentMode == ThemeMode.dark ||
-                    (currentMode == ThemeMode.system && MediaQuery.of(context).platformBrightness == Brightness.dark);
-
-                return ListTile(
-                  leading: Icon(
-                    isCurrentlyDark ? Icons.light_mode : Icons.dark_mode_outlined,
-                    color: isCurrentlyDark ? Colors.amber : Colors.grey.shade700,
-                  ),
-                  title: Text(
-                    isCurrentlyDark ? "Light Mode" : "Dark Mode",
-                    style: const TextStyle(fontWeight: FontWeight.w500),
-                  ),
-                  onTap: () {
-                    themeNotifier.value = isCurrentlyDark ? ThemeMode.light : ThemeMode.dark;
-                  },
-                  hoverColor: theme.primaryColor.withValues(alpha: 0.1),
-                );
-              }
+          // ✅ UPDATED THEME TOGGLE USING 3-STATE ThemeManager
+          ThemeSwitcher(
+            clipper: const ThemeSwitcherCircleClipper(),
+            builder: (context) {
+              return ListTile(
+                leading: Icon(
+                  ThemeManager.instance.currentMode == AppThemeMode.system
+                      ? Icons.brightness_auto
+                      : (ThemeManager.instance.currentMode == AppThemeMode.light ? Icons.light_mode : Icons.dark_mode_outlined),
+                  color: ThemeManager.instance.currentMode == AppThemeMode.system
+                      ? colors.processing
+                      : (ThemeManager.instance.currentMode == AppThemeMode.light ? Colors.amber : colors.primary),
+                ),
+                title: Text(
+                  ThemeManager.instance.currentMode == AppThemeMode.system
+                      ? "System Theme"
+                      : (ThemeManager.instance.currentMode == AppThemeMode.light ? "Light Mode" : "Dark Mode"),
+                  style: TextStyle(fontWeight: FontWeight.w500, color: colors.textMain),
+                ),
+                onTap: () {
+                  ThemeManager.instance.toggleTheme(); // Cycles through System -> Light -> Dark
+                  final newColors = ThemeManager.instance.colors;
+                  final newIsDark = ThemeManager.instance.isDarkMode;
+                  ThemeSwitcher.of(context).changeTheme(
+                    theme: ThemeData(
+                      brightness: newIsDark ? Brightness.dark : Brightness.light,
+                      primaryColor: newColors.primary,
+                      scaffoldBackgroundColor: newIsDark ? Colors.black : newColors.bgBottom,
+                      cardColor: newColors.card,
+                      appBarTheme: AppBarTheme(backgroundColor: newColors.card, foregroundColor: newColors.textMain),
+                      useMaterial3: false,
+                      pageTransitionsTheme: const PageTransitionsTheme(
+                        builders: {
+                          TargetPlatform.android: SharedAxisPageTransitionsBuilder(transitionType: SharedAxisTransitionType.scaled),
+                          TargetPlatform.iOS: SharedAxisPageTransitionsBuilder(transitionType: SharedAxisTransitionType.scaled),
+                          TargetPlatform.windows: SharedAxisPageTransitionsBuilder(transitionType: SharedAxisTransitionType.scaled),
+                          TargetPlatform.macOS: SharedAxisPageTransitionsBuilder(transitionType: SharedAxisTransitionType.scaled),
+                          TargetPlatform.linux: SharedAxisPageTransitionsBuilder(transitionType: SharedAxisTransitionType.scaled),
+                        },
+                      ),
+                    ),
+                  );
+                },
+                hoverColor: colors.primary.withValues(alpha: 0.1),
+              );
+            }
           ),
 
           // Logout Button
           ListTile(
-            leading: const Icon(Icons.logout, color: Colors.redAccent),
-            title: const Text("Logout", style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold)),
+            leading: Icon(Icons.logout, color: colors.error),
+            title: Text("Logout", style: TextStyle(color: colors.error, fontWeight: FontWeight.bold)),
             onTap: () async {
               await FirebaseAuth.instance.signOut();
               if (context.mounted) {
                 Navigator.pushNamedAndRemoveUntil(context, '/', (route) => false);
               }
             },
-            hoverColor: Colors.redAccent.withValues(alpha: 0.1),
+            hoverColor: colors.error.withValues(alpha: 0.1),
           ),
           const SizedBox(height: 16),
         ],
@@ -95,21 +121,20 @@ class AdminSidebar extends StatelessWidget {
     );
   }
 
-  Widget _buildNavItem(BuildContext context, IconData icon, String title, String route) {
+  Widget _buildNavItem(BuildContext context, IconData icon, String title, String route, AppColors colors) {
     final isActive = activeRoute == route;
-    final theme = Theme.of(context);
 
     return ListTile(
-      leading: Icon(icon, color: isActive ? theme.primaryColor : Colors.grey),
+      leading: Icon(icon, color: isActive ? colors.primary : colors.textMuted),
       title: Text(
         title,
         style: TextStyle(
-          color: isActive ? theme.primaryColor : (theme.brightness == Brightness.dark ? Colors.white70 : Colors.black87),
+          color: isActive ? colors.primary : colors.textMain,
           fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
         ),
       ),
       selected: isActive,
-      selectedTileColor: theme.primaryColor.withValues(alpha: 0.1),
+      selectedTileColor: colors.primary.withValues(alpha: 0.1),
       onTap: () {
         if (!isActive) Navigator.pushReplacementNamed(context, route);
       },
@@ -128,11 +153,12 @@ class FacultySidebar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+    // Grab our custom colors!
+    final colors = ThemeManager.instance.colors;
 
     return Container(
       width: 250,
-      color: theme.cardColor,
+      color: colors.card,
       child: Column(
         children: [
           // Logo Area
@@ -141,63 +167,87 @@ class FacultySidebar extends StatelessWidget {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(Icons.school, size: 28, color: theme.primaryColor),
+                Icon(Icons.school, size: 28, color: colors.primary),
                 const SizedBox(width: 12),
-                const Text(
+                Text(
                   "FacultyPay",
-                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: colors.textMain),
                 ),
               ],
             ),
           ),
 
-          const Divider(),
+          Divider(color: colors.textMain.withValues(alpha: 0.1)),
           const SizedBox(height: 16),
 
           // Menu Items
-          _buildNavItem(context, Icons.dashboard, "Dashboard", '/faculty/dashboard'),
-          _buildNavItem(context, Icons.calendar_today, "Add Attendance", '/faculty/add-attendance'),
-          _buildNavItem(context, Icons.account_balance_wallet, "Salary History", '/faculty/salary-history'),
-          _buildNavItem(context, Icons.person, "My Profile", '/faculty/profile'),
+          _buildNavItem(context, Icons.dashboard, "Dashboard", '/faculty/dashboard', colors),
+          _buildNavItem(context, Icons.calendar_today, "Add Attendance", '/faculty/add-attendance', colors),
+          _buildNavItem(context, Icons.account_balance_wallet, "Salary History", '/faculty/salary-history', colors),
+          _buildNavItem(context, Icons.person, "My Profile", '/faculty/profile', colors),
 
           const Spacer(),
-          const Divider(),
+          Divider(color: colors.textMain.withValues(alpha: 0.1)),
 
-          // ✅ DARK MODE TOGGLE
-          ValueListenableBuilder<ThemeMode>(
-              valueListenable: themeNotifier,
-              builder: (context, currentMode, child) {
-                final isCurrentlyDark = currentMode == ThemeMode.dark ||
-                    (currentMode == ThemeMode.system && MediaQuery.of(context).platformBrightness == Brightness.dark);
-
-                return ListTile(
-                  leading: Icon(
-                    isCurrentlyDark ? Icons.light_mode : Icons.dark_mode_outlined,
-                    color: isCurrentlyDark ? Colors.amber : Colors.grey.shade700,
-                  ),
-                  title: Text(
-                    isCurrentlyDark ? "Light Mode" : "Dark Mode",
-                    style: const TextStyle(fontWeight: FontWeight.w500),
-                  ),
-                  onTap: () {
-                    themeNotifier.value = isCurrentlyDark ? ThemeMode.light : ThemeMode.dark;
-                  },
-                  hoverColor: theme.primaryColor.withValues(alpha: 0.1),
-                );
-              }
+          // ✅ UPDATED THEME TOGGLE USING 3-STATE ThemeManager
+          ThemeSwitcher(
+            clipper: const ThemeSwitcherCircleClipper(),
+            builder: (context) {
+              return ListTile(
+                leading: Icon(
+                  ThemeManager.instance.currentMode == AppThemeMode.system
+                      ? Icons.brightness_auto
+                      : (ThemeManager.instance.currentMode == AppThemeMode.light ? Icons.light_mode : Icons.dark_mode_outlined),
+                  color: ThemeManager.instance.currentMode == AppThemeMode.system
+                      ? colors.processing
+                      : (ThemeManager.instance.currentMode == AppThemeMode.light ? Colors.amber : colors.primary),
+                ),
+                title: Text(
+                  ThemeManager.instance.currentMode == AppThemeMode.system
+                      ? "System Theme"
+                      : (ThemeManager.instance.currentMode == AppThemeMode.light ? "Light Mode" : "Dark Mode"),
+                  style: TextStyle(fontWeight: FontWeight.w500, color: colors.textMain),
+                ),
+                onTap: () {
+                  ThemeManager.instance.toggleTheme(); // Cycles through System -> Light -> Dark
+                  final newColors = ThemeManager.instance.colors;
+                  final newIsDark = ThemeManager.instance.isDarkMode;
+                  ThemeSwitcher.of(context).changeTheme(
+                    theme: ThemeData(
+                      brightness: newIsDark ? Brightness.dark : Brightness.light,
+                      primaryColor: newColors.primary,
+                      scaffoldBackgroundColor: newIsDark ? Colors.black : newColors.bgBottom,
+                      cardColor: newColors.card,
+                      appBarTheme: AppBarTheme(backgroundColor: newColors.card, foregroundColor: newColors.textMain),
+                      useMaterial3: false,
+                      pageTransitionsTheme: const PageTransitionsTheme(
+                        builders: {
+                          TargetPlatform.android: SharedAxisPageTransitionsBuilder(transitionType: SharedAxisTransitionType.scaled),
+                          TargetPlatform.iOS: SharedAxisPageTransitionsBuilder(transitionType: SharedAxisTransitionType.scaled),
+                          TargetPlatform.windows: SharedAxisPageTransitionsBuilder(transitionType: SharedAxisTransitionType.scaled),
+                          TargetPlatform.macOS: SharedAxisPageTransitionsBuilder(transitionType: SharedAxisTransitionType.scaled),
+                          TargetPlatform.linux: SharedAxisPageTransitionsBuilder(transitionType: SharedAxisTransitionType.scaled),
+                        },
+                      ),
+                    ),
+                  );
+                },
+                hoverColor: colors.primary.withValues(alpha: 0.1),
+              );
+            }
           ),
 
           // Logout Button
           ListTile(
-            leading: const Icon(Icons.logout, color: Colors.redAccent),
-            title: const Text("Logout", style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold)),
+            leading: Icon(Icons.logout, color: colors.error),
+            title: Text("Logout", style: TextStyle(color: colors.error, fontWeight: FontWeight.bold)),
             onTap: () async {
               await FirebaseAuth.instance.signOut();
               if (context.mounted) {
                 Navigator.pushNamedAndRemoveUntil(context, '/', (route) => false);
               }
             },
-            hoverColor: Colors.redAccent.withValues(alpha: 0.1),
+            hoverColor: colors.error.withValues(alpha: 0.1),
           ),
           const SizedBox(height: 16),
         ],
@@ -205,21 +255,20 @@ class FacultySidebar extends StatelessWidget {
     );
   }
 
-  Widget _buildNavItem(BuildContext context, IconData icon, String title, String route) {
+  Widget _buildNavItem(BuildContext context, IconData icon, String title, String route, AppColors colors) {
     final isActive = activeRoute == route;
-    final theme = Theme.of(context);
 
     return ListTile(
-      leading: Icon(icon, color: isActive ? theme.primaryColor : Colors.grey),
+      leading: Icon(icon, color: isActive ? colors.primary : colors.textMuted),
       title: Text(
         title,
         style: TextStyle(
-          color: isActive ? theme.primaryColor : (theme.brightness == Brightness.dark ? Colors.white70 : Colors.black87),
+          color: isActive ? colors.primary : colors.textMain,
           fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
         ),
       ),
       selected: isActive,
-      selectedTileColor: theme.primaryColor.withValues(alpha: 0.1),
+      selectedTileColor: colors.primary.withValues(alpha: 0.1),
       onTap: () {
         if (!isActive) Navigator.pushReplacementNamed(context, route);
       },

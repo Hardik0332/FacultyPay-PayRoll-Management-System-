@@ -1,3 +1,5 @@
+import 'package:animations/animations.dart';
+import 'package:animated_theme_switcher/animated_theme_switcher.dart';
 import 'dart:ui';
 import 'dart:convert';
 import 'package:flutter/material.dart';
@@ -6,8 +8,10 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:qr_flutter/qr_flutter.dart';
+
 import '../../services/notification_service.dart';
 import '../../services/receipt_service.dart';
+import '../../theme/theme_manager.dart'; // ✅ Added ThemeManager
 
 class AdminCalculateSalaryPage extends StatefulWidget {
   const AdminCalculateSalaryPage({super.key});
@@ -18,78 +22,88 @@ class AdminCalculateSalaryPage extends StatefulWidget {
 
 class _AdminCalculateSalaryPageState extends State<AdminCalculateSalaryPage> {
   final Color primaryRed = const Color(0xFFE05B5C);
-  final Color successGreen = const Color(0xFF4ADE80);
-  final Color pendingOrange = const Color(0xFFFBBF24);
-  final Color verifiedBlue = const Color(0xFF60A5FA);
-
-  String? _searchUid; // ✅ Added state to track active search
+  String? _searchUid;
 
   @override
   Widget build(BuildContext context) {
-    return Stack( // ✅ Removed Scaffold, wrapped in Stack
-      children: [
-        // 1. Background Gradient
-        Container(
-          decoration: const BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: [Color(0xFF3B4154), Color(0xFF1E212A)],
-            ),
-          ),
-        ),
+    return AnimatedBuilder(
+        animation: ThemeManager.instance,
+        builder: (context, child) {
+          final colors = ThemeManager.instance.colors;
+          final isDark = ThemeManager.instance.isDarkMode;
 
-        // 2. Main Content
-        SafeArea(
-          bottom: false,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+          return Stack(
             children: [
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
-                child: _buildHeader(),
+              // 1. Background Gradient
+              Container(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [colors.bgTop, colors.bgBottom],
+                  ),
+                ),
               ),
 
-              // Main List Container
-              Expanded(
-                child: Container(
-                  width: double.infinity,
-                  decoration: const BoxDecoration(
-                    color: Color(0xFF242832),
-                    borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Padding(
-                        padding: const EdgeInsets.only(top: 24, left: 20, right: 20, bottom: 16),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(_searchUid == null ? "Process Payments" : "Filtered Payments", style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white, letterSpacing: 0.5)),
-                            const SizedBox(height: 4),
-                            Text("Calculate and clear verified logs for faculty.", style: TextStyle(color: Colors.white.withValues(alpha: 0.6), fontSize: 13)),
-                          ],
+              // 2. Main Content
+              SafeArea(
+                bottom: false,
+                child: Center(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 800),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
+                          child: _buildHeader(colors, isDark),
                         ),
-                      ),
 
-                      Expanded(
-                        child: _buildFacultyList(),
-                      ),
-                    ],
+                        // Main List Container
+                        Expanded(
+                          child: Container(
+                            width: double.infinity,
+                            decoration: BoxDecoration(
+                              color: colors.card,
+                              borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
+                              boxShadow: isDark ? [] : [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 20, offset: const Offset(0, -5))],
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 24, left: 20, right: 20, bottom: 16),
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(_searchUid == null ? "Process Payments" : "Filtered Payments", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: colors.textMain, letterSpacing: 0.5)),
+                                      const SizedBox(height: 4),
+                                      Text("Calculate and clear verified logs for faculty.", style: TextStyle(color: colors.textMuted, fontSize: 13)),
+                                    ],
+                                  ),
+                                ),
+
+                                Expanded(
+                                  child: _buildFacultyList(colors, isDark),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
             ],
-          ),
-        ),
-      ],
+          );
+        }
     );
   }
 
   // --- UI COMPONENTS ---
 
-  Widget _buildHeader() {
+  Widget _buildHeader(AppColors colors, bool isDark) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
@@ -99,19 +113,71 @@ class _AdminCalculateSalaryPageState extends State<AdminCalculateSalaryPage> {
             children: [
               Text("Admin Action", style: TextStyle(color: primaryRed, fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 1.5)),
               const SizedBox(height: 2),
-              const Text("Payouts", style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold, color: Colors.white, letterSpacing: -0.5), overflow: TextOverflow.ellipsis),
+              Text("Payouts", style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold, color: colors.textMain, letterSpacing: -0.5), overflow: TextOverflow.ellipsis),
             ],
           ),
         ),
         Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // ✅ FIXED: Added GestureDetector and SearchDelegate
+            // Theme Toggle
+            // Theme Toggle
+            ThemeSwitcher(
+              clipper: const ThemeSwitcherCircleClipper(),
+              builder: (context) {
+                return GestureDetector(
+                  onTap: () {
+                    ThemeManager.instance.toggleTheme();
+                    final newColors = ThemeManager.instance.colors;
+                    final newIsDark = ThemeManager.instance.isDarkMode;
+                    ThemeSwitcher.of(context).changeTheme(
+                      theme: ThemeData(
+                        brightness: newIsDark ? Brightness.dark : Brightness.light,
+                        primaryColor: newColors.primary,
+                        scaffoldBackgroundColor: newIsDark ? Colors.black : newColors.bgBottom,
+                        cardColor: newColors.card,
+                        appBarTheme: AppBarTheme(
+                          backgroundColor: newColors.card,
+                          foregroundColor: newColors.textMain,
+                        ),
+                        useMaterial3: false,
+                        pageTransitionsTheme: const PageTransitionsTheme(
+                          builders: {
+                            TargetPlatform.android: SharedAxisPageTransitionsBuilder(transitionType: SharedAxisTransitionType.scaled),
+                            TargetPlatform.iOS: SharedAxisPageTransitionsBuilder(transitionType: SharedAxisTransitionType.scaled),
+                            TargetPlatform.windows: SharedAxisPageTransitionsBuilder(transitionType: SharedAxisTransitionType.scaled),
+                            TargetPlatform.macOS: SharedAxisPageTransitionsBuilder(transitionType: SharedAxisTransitionType.scaled),
+                            TargetPlatform.linux: SharedAxisPageTransitionsBuilder(transitionType: SharedAxisTransitionType.scaled),
+                          },
+                        ),
+                      ),
+                    );
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: isDark ? colors.textMain.withValues(alpha: 0.1) : colors.textMuted.withValues(alpha: 0.2),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      ThemeManager.instance.currentMode == AppThemeMode.system
+                          ? Icons.brightness_auto
+                          : (ThemeManager.instance.currentMode == AppThemeMode.light ? Icons.light_mode : Icons.dark_mode_outlined),
+                      color: ThemeManager.instance.currentMode == AppThemeMode.light ? Colors.amber : colors.textMain,
+                      size: 20,
+                    ),
+                  ),
+                );
+              }
+            ),
+            const SizedBox(width: 12),
+
+            // Search Action
             GestureDetector(
               onTap: () async {
-                final String? selectedUid = await showSearch<String>(
-                    context: context,
-                    delegate: SalarySearchDelegate()
+                final String? selectedUid = await showDialog<String>(
+                  context: context,
+                  builder: (context) => const FacultySearchDialog(),
                 );
                 if (selectedUid != null && selectedUid.isNotEmpty) {
                   setState(() {
@@ -121,12 +187,11 @@ class _AdminCalculateSalaryPageState extends State<AdminCalculateSalaryPage> {
               },
               child: Container(
                   padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.15), shape: BoxShape.circle),
-                  child: const Icon(Icons.search, color: Colors.white, size: 20)
+                  decoration: BoxDecoration(color: isDark ? colors.textMain.withValues(alpha: 0.15) : colors.primary.withValues(alpha: 0.1), shape: BoxShape.circle),
+                  child: Icon(Icons.search, color: isDark ? Colors.white : colors.primary, size: 20)
               ),
             ),
 
-            // ✅ CLEAR FILTER BUTTON
             if (_searchUid != null) ...[
               const SizedBox(width: 8),
               GestureDetector(
@@ -137,8 +202,8 @@ class _AdminCalculateSalaryPageState extends State<AdminCalculateSalaryPage> {
                 },
                 child: Container(
                     padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(color: primaryRed.withValues(alpha: 0.2), shape: BoxShape.circle),
-                    child: Icon(Icons.close, color: primaryRed, size: 20)
+                    decoration: BoxDecoration(color: colors.error.withValues(alpha: 0.2), shape: BoxShape.circle),
+                    child: Icon(Icons.close, color: colors.error, size: 20)
                 ),
               ),
             ],
@@ -153,13 +218,12 @@ class _AdminCalculateSalaryPageState extends State<AdminCalculateSalaryPage> {
                     avatarBase64 = data?['avatarBase64'];
                   }
                   return GestureDetector(
-                    // ✅ FIXED: Corrected route from '/admin/my-profile' to '/admin/profile'
                     onTap: () => Navigator.pushReplacementNamed(context, '/admin/profile'),
                     child: CircleAvatar(
                       radius: 18,
-                      backgroundColor: Colors.white.withValues(alpha: 0.15),
+                      backgroundColor: isDark ? colors.textMain.withValues(alpha: 0.15) : colors.primary,
                       backgroundImage: avatarBase64 != null && avatarBase64.isNotEmpty ? MemoryImage(base64Decode(avatarBase64)) : null,
-                      child: (avatarBase64 == null || avatarBase64.isEmpty) ? const Icon(Icons.person, color: Colors.white, size: 20) : null,
+                      child: (avatarBase64 == null || avatarBase64.isEmpty) ? Icon(Icons.person, color: isDark ? colors.textMain : Colors.white, size: 20) : null,
                     ),
                   );
                 }
@@ -170,16 +234,15 @@ class _AdminCalculateSalaryPageState extends State<AdminCalculateSalaryPage> {
     );
   }
 
-  Widget _buildFacultyList() {
-    // ✅ Applied Search Filter
+  Widget _buildFacultyList(AppColors colors, bool isDark) {
     Query query = FirebaseFirestore.instance.collection('users').where('role', isEqualTo: 'faculty');
     if (_searchUid != null) {
       query = query.where('uid', isEqualTo: _searchUid);
     }
 
     return RefreshIndicator(
-      color: primaryRed,
-      backgroundColor: const Color(0xFF2A2E39),
+      color: colors.primary,
+      backgroundColor: colors.cardHighlight,
       onRefresh: () async {
         await Future.delayed(const Duration(milliseconds: 1200));
         setState(() {});
@@ -188,10 +251,10 @@ class _AdminCalculateSalaryPageState extends State<AdminCalculateSalaryPage> {
         stream: query.snapshots(),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
-            return Center(child: CircularProgressIndicator(color: primaryRed));
+            return Center(child: CircularProgressIndicator(color: colors.primary));
           }
           if (snapshot.hasError) {
-            return Center(child: Text("Error loading data", style: TextStyle(color: primaryRed)));
+            return Center(child: Text("Error loading data", style: TextStyle(color: colors.error)));
           }
 
           final docs = snapshot.data!.docs;
@@ -201,19 +264,23 @@ class _AdminCalculateSalaryPageState extends State<AdminCalculateSalaryPage> {
                 physics: const AlwaysScrollableScrollPhysics(),
                 children: [
                   const SizedBox(height: 100),
-                  Icon(Icons.account_balance_wallet_outlined, size: 60, color: Colors.white.withValues(alpha: 0.2)),
+                  Icon(Icons.account_balance_wallet_outlined, size: 60, color: colors.textMuted.withValues(alpha: 0.5)),
                   const SizedBox(height: 16),
-                  Center(child: Text("No faculty members found.", style: TextStyle(color: Colors.white.withValues(alpha: 0.5), fontSize: 16, fontWeight: FontWeight.bold))),
+                  Center(child: Text("No faculty members found.", style: TextStyle(color: colors.textMuted, fontSize: 16, fontWeight: FontWeight.bold))),
                 ]
             );
           }
 
           return ListView.builder(
-            padding: const EdgeInsets.only(left: 20, right: 20, bottom: 120), // ✅ Added padding to clear nav bar
+            padding: const EdgeInsets.only(left: 20, right: 20, bottom: 120),
             physics: const AlwaysScrollableScrollPhysics(),
             itemCount: docs.length,
             itemBuilder: (context, index) {
-              return _AdminSalaryCard(facultyDoc: docs[index]);
+              return _AdminSalaryCard(
+                  facultyDoc: docs[index],
+                  colors: colors,
+                  isDark: isDark
+              );
             },
           );
         },
@@ -225,15 +292,13 @@ class _AdminCalculateSalaryPageState extends State<AdminCalculateSalaryPage> {
 // ================= INDIVIDUAL SALARY CARD COMPONENT =================
 class _AdminSalaryCard extends StatelessWidget {
   final QueryDocumentSnapshot facultyDoc;
+  final AppColors colors;
+  final bool isDark;
 
-  const _AdminSalaryCard({required this.facultyDoc});
+  const _AdminSalaryCard({required this.facultyDoc, required this.colors, required this.isDark});
 
   @override
   Widget build(BuildContext context) {
-    final Color successGreen = const Color(0xFF4ADE80);
-    final Color pendingOrange = const Color(0xFFFBBF24);
-    final Color verifiedBlue = const Color(0xFF60A5FA);
-
     final data = facultyDoc.data() as Map<String, dynamic>;
     final String uid = facultyDoc.id;
     final String name = data['name'] ?? 'Unknown';
@@ -293,14 +358,10 @@ class _AdminSalaryCard extends StatelessWidget {
           child: Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: const Color(0xFF2A2E39),
+              color: isDark ? colors.cardHighlight : colors.card,
               borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
-              boxShadow: [
-                BoxShadow(color: Colors.black.withValues(alpha: 0.1),
-                    blurRadius: 10,
-                    offset: const Offset(0, 4))
-              ],
+              border: Border.all(color: isDark ? colors.textMain.withValues(alpha: 0.05) : Colors.transparent),
+              boxShadow: isDark ? [] : [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 10, offset: const Offset(0, 4))],
             ),
             child: Column(
               children: [
@@ -309,15 +370,11 @@ class _AdminSalaryCard extends StatelessWidget {
                   children: [
                     CircleAvatar(
                       radius: 20,
-                      backgroundColor: const Color(0xFF4A5060),
-                      backgroundImage: avatarBase64 != null &&
-                          avatarBase64.isNotEmpty ? MemoryImage(
-                          base64Decode(avatarBase64)) : null,
-                      child: (avatarBase64 == null || avatarBase64.isEmpty)
+                      backgroundColor: isDark ? const Color(0xFF4A5060) : colors.bgTop,
+                      backgroundImage: avatarBase64 != null && avatarBase64!.isNotEmpty ? MemoryImage(base64Decode(avatarBase64!)) : null,
+                      child: (avatarBase64 == null || avatarBase64!.isEmpty)
                           ? Text(name.isNotEmpty ? name[0].toUpperCase() : 'F',
-                          style: const TextStyle(color: Colors.white,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 16))
+                          style: TextStyle(color: colors.textMuted, fontWeight: FontWeight.bold, fontSize: 16))
                           : null,
                     ),
                     const SizedBox(width: 16),
@@ -325,44 +382,27 @@ class _AdminSalaryCard extends StatelessWidget {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(name, style: const TextStyle(color: Colors.white,
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold),
-                              overflow: TextOverflow.ellipsis),
+                          Text(name, style: TextStyle(color: colors.textMain, fontSize: 16, fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis),
                           const SizedBox(height: 2),
-                          Text("Dept: ${dept.toUpperCase()}", style: TextStyle(
-                              color: Colors.white.withValues(alpha: 0.6),
-                              fontSize: 11,
-                              fontWeight: FontWeight.bold,
-                              letterSpacing: 0.5)),
+                          Text("Dept: ${dept.toUpperCase()}", style: TextStyle(color: colors.textMuted, fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
                         ],
                       ),
                     ),
                     Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 10, vertical: 6),
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                       decoration: BoxDecoration(
-                        color: isOwed
-                            ? pendingOrange.withValues(alpha: 0.1)
-                            : successGreen.withValues(alpha: 0.1),
+                        color: isOwed ? colors.warningBg : colors.successBg,
                         borderRadius: BorderRadius.circular(20),
-                        border: Border.all(color: isOwed ? pendingOrange
-                            .withValues(alpha: 0.3) : successGreen.withValues(
-                            alpha: 0.3)),
+                        border: Border.all(color: isOwed ? colors.warning.withValues(alpha: 0.3) : colors.success.withValues(alpha: 0.3)),
                       ),
                       child: Text(isOwed ? "PENDING" : "PAID UP",
-                          style: TextStyle(
-                              color: isOwed ? pendingOrange : successGreen,
-                              fontSize: 10,
-                              fontWeight: FontWeight.w800,
-                              letterSpacing: 1)),
+                          style: TextStyle(color: isOwed ? colors.warning : colors.success, fontSize: 10, fontWeight: FontWeight.w800, letterSpacing: 1)),
                     )
                   ],
                 ),
 
                 const SizedBox(height: 16),
-                Container(
-                    height: 1, color: Colors.white.withValues(alpha: 0.05)),
+                Container(height: 1, color: colors.textMain.withValues(alpha: 0.05)),
                 const SizedBox(height: 16),
 
                 // Bottom Row: Amount & Actions
@@ -374,17 +414,13 @@ class _AdminSalaryCard extends StatelessWidget {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text("$displayLectures VERIFIED LOG(S)",
-                              style: TextStyle(color: Colors.white.withValues(
-                                  alpha: 0.4), fontSize: 9, fontWeight: FontWeight
-                                  .bold, letterSpacing: 1)),
+                              style: TextStyle(color: colors.textMuted, fontSize: 9, fontWeight: FontWeight.bold, letterSpacing: 1)),
                           const SizedBox(height: 2),
                           FittedBox(
                             fit: BoxFit.scaleDown,
                             alignment: Alignment.centerLeft,
                             child: Text("₹${displayAmount.toStringAsFixed(2)}",
-                                style: const TextStyle(color: Colors.white,
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.w900)),
+                                style: TextStyle(color: colors.textMain, fontSize: 18, fontWeight: FontWeight.w900)),
                           ),
                         ],
                       ),
@@ -393,37 +429,19 @@ class _AdminSalaryCard extends StatelessWidget {
                       children: [
                         if (isOwed)
                           GestureDetector(
-                            onTap: () =>
-                                _payFaculty(
-                                    context,
-                                    uid,
-                                    docsToPay,
-                                    name,
-                                    displayAmount,
-                                    upiId,
-                                    successGreen),
+                            onTap: () => _payFaculty(context, uid, docsToPay, name, dept, displayAmount, upiId),
                             child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 16, vertical: 10),
+                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                               decoration: BoxDecoration(
-                                color: successGreen,
+                                color: colors.success,
                                 borderRadius: BorderRadius.circular(12),
-                                boxShadow: [
-                                  BoxShadow(color: successGreen.withValues(
-                                      alpha: 0.3),
-                                      blurRadius: 8,
-                                      offset: const Offset(0, 3))
-                                ],
+                                boxShadow: [BoxShadow(color: colors.success.withValues(alpha: 0.3), blurRadius: 8, offset: const Offset(0, 3))],
                               ),
                               child: Row(
                                 children: [
-                                  const Icon(Icons.account_balance_wallet,
-                                      color: Colors.black, size: 14),
+                                  Icon(Icons.account_balance_wallet, color: isDark ? Colors.black : Colors.white, size: 14),
                                   const SizedBox(width: 6),
-                                  const Text("Pay Now", style: TextStyle(
-                                      color: Colors.black,
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.bold)),
+                                  Text("Pay Now", style: TextStyle(color: isDark ? Colors.black : Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
                                 ],
                               ),
                             ),
@@ -435,8 +453,7 @@ class _AdminSalaryCard extends StatelessWidget {
                                 List<List<String>> receiptDetails = [];
                                 for (var doc in paidDocsThisMonth) {
                                   final d = doc.data() as Map<String, dynamic>;
-                                  DateTime dt = (d['date'] as Timestamp)
-                                      .toDate();
+                                  DateTime dt = (d['date'] as Timestamp).toDate();
                                   int lecs = d['lectures'] as int;
                                   double rowTotal = lecs * rate;
                                   receiptDetails.add([
@@ -451,47 +468,33 @@ class _AdminSalaryCard extends StatelessWidget {
                                 ReceiptService.printReceipt(
                                   facultyName: name,
                                   department: dept,
-                                  month: DateFormat('MMMM yyyy').format(
-                                      DateTime.now()),
+                                  month: DateFormat('MMMM yyyy').format(DateTime.now()),
                                   totalLectures: displayLectures,
                                   ratePerLecture: rate,
                                   totalAmount: displayAmount,
-                                  paymentDate: DateFormat('yyyy-MM-dd').format(
-                                      DateTime.now()),
-                                  receiptId: "REC-${DateTime
-                                      .now()
-                                      .millisecondsSinceEpoch}",
+                                  paymentDate: DateFormat('yyyy-MM-dd').format(DateTime.now()),
+                                  receiptId: "REC-${DateTime.now().millisecondsSinceEpoch}",
                                   lectureDetails: receiptDetails,
                                 );
                               },
                               child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 16, vertical: 10),
+                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                                 decoration: BoxDecoration(
-                                    color: verifiedBlue.withValues(alpha: 0.15),
+                                    color: colors.processingBg,
                                     borderRadius: BorderRadius.circular(12),
-                                    border: Border.all(
-                                        color: verifiedBlue.withValues(
-                                            alpha: 0.5))
+                                    border: Border.all(color: colors.processing.withValues(alpha: 0.3))
                                 ),
                                 child: Row(
                                   children: [
-                                    Icon(Icons.print, color: verifiedBlue,
-                                        size: 14),
+                                    Icon(Icons.print, color: colors.processing, size: 14),
                                     const SizedBox(width: 6),
-                                    Text("Print Slip", style: TextStyle(
-                                        color: verifiedBlue,
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.bold)),
+                                    Text("Print Slip", style: TextStyle(color: colors.processing, fontSize: 12, fontWeight: FontWeight.bold)),
                                   ],
                                 ),
                               ),
                             )
                           else
-                            Text("No dues this month", style: TextStyle(
-                                color: Colors.white.withValues(alpha: 0.3),
-                                fontSize: 11,
-                                fontStyle: FontStyle.italic)),
+                            Text("No dues this month", style: TextStyle(color: colors.textMuted, fontSize: 11, fontStyle: FontStyle.italic)),
                       ],
                     )
                   ],
@@ -504,141 +507,161 @@ class _AdminSalaryCard extends StatelessWidget {
     );
   }
 
-  Future<void> _payFaculty(BuildContext context, String uid,
-      List<QueryDocumentSnapshot> docs, String facultyName, double amount,
-      String upiId, Color successGreen) async {
+  Future<void> _payFaculty(BuildContext context, String uid, List<QueryDocumentSnapshot> docs, String facultyName, String dept, double amount, String upiId) async {
     final String upiString = upiId.isNotEmpty
-        ? "upi://pay?pa=$upiId&pn=${Uri.encodeComponent(
-        facultyName)}&am=${amount.toStringAsFixed(2)}&cu=INR"
+        ? "upi://pay?pa=$upiId&pn=${Uri.encodeComponent(facultyName)}&am=${amount.toStringAsFixed(2)}&cu=INR"
         : "";
 
     bool confirm = await showDialog(
         context: context,
-        builder: (c) =>
-            AlertDialog(
-              backgroundColor: const Color(0xFF2A2E39),
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(20),
-                  side: BorderSide(color: Colors.white.withValues(alpha: 0.05))
-              ),
-              title: Text("Pay $facultyName", style: const TextStyle(
-                  color: Colors.white, fontWeight: FontWeight.bold)),
-              content: SizedBox(
-                width: 320,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text("Amount Due: ₹${amount.toStringAsFixed(2)}",
-                        style: TextStyle(fontSize: 22,
-                            fontWeight: FontWeight.w900,
-                            color: successGreen)),
-                    const SizedBox(height: 4),
-                    Text("Total Verified Lectures: ${docs.length}",
-                        style: TextStyle(
-                            color: Colors.white.withValues(alpha: 0.6),
-                            fontSize: 12)),
+        builder: (c) => AnimatedBuilder( // Wrap Dialog in AnimatedBuilder to catch theme changes
+            animation: ThemeManager.instance,
+            builder: (context, child) {
+              final dialogColors = ThemeManager.instance.colors;
+              final dialogIsDark = ThemeManager.instance.isDarkMode;
 
-                    if (upiId.isNotEmpty) ...[
-                      const SizedBox(height: 24),
-                      const Text("Scan to Pay", style: TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 16)),
-                      const SizedBox(height: 8),
-                      Text("Use GPay, PhonePe, or Paytm on your phone",
-                          style: TextStyle(fontSize: 12,
-                              color: Colors.white.withValues(alpha: 0.5)),
-                          textAlign: TextAlign.center),
-                      const SizedBox(height: 16),
+              return Dialog(
+                backgroundColor: dialogColors.card,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 400),
+                  child: Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            // Top Icon
+                            Container(
+                              padding: const EdgeInsets.all(16),
+                              decoration: BoxDecoration(
+                                color: dialogColors.successBg,
+                                shape: BoxShape.circle,
+                              ),
+                              child: Icon(Icons.qr_code_scanner, color: dialogColors.success, size: 32),
+                            ),
+                            const SizedBox(height: 16),
 
-                      Container(
-                        width: 200,
-                        height: 200,
-                        alignment: Alignment.center,
-                        padding: const EdgeInsets.all(10),
-                        decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(16),
-                            boxShadow: [BoxShadow(color: successGreen
-                                .withValues(alpha: 0.2), blurRadius: 20)
-                            ]
-                        ),
-                        child: QrImageView(
-                          data: upiString,
-                          version: QrVersions.auto,
-                          size: 180.0,
-                          backgroundColor: Colors.white,
+                            // Title & Subtitle
+                            Text("Scan to Pay", style: TextStyle(color: dialogColors.textMain, fontSize: 24, fontWeight: FontWeight.bold)),
+                            const SizedBox(height: 6),
+                            Text("$facultyName • ${dept.toUpperCase()}", style: TextStyle(color: dialogColors.textMuted, fontSize: 13, fontWeight: FontWeight.w500)),
+                            const SizedBox(height: 24),
+
+                            // QR Code Area
+                            if (upiId.isNotEmpty) ...[
+                              Container(
+                                padding: const EdgeInsets.all(16),
+                                decoration: BoxDecoration(
+                                    color: Colors.white, // QR Background MUST ALWAYS BE WHITE for scanning
+                                    borderRadius: BorderRadius.circular(20),
+                                    boxShadow: [
+                                      BoxShadow(color: Colors.black.withValues(alpha: 0.1), blurRadius: 20, offset: const Offset(0, 5))
+                                    ]
+                                ),
+                                child: QrImageView(
+                                  data: upiString,
+                                  version: QrVersions.auto,
+                                  size: 160.0,
+                                  backgroundColor: Colors.white,
+                                  foregroundColor: Colors.black, // QR Modules MUST ALWAYS BE BLACK
+                                ),
+                              ),
+                              const SizedBox(height: 24),
+
+                              // Amount Label & Value
+                              Text("AMOUNT TO TRANSFER", style: TextStyle(color: dialogColors.textMuted, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1.5)),
+                              const SizedBox(height: 4),
+                              Text("₹${amount.toStringAsFixed(2)}", style: TextStyle(color: dialogColors.success, fontSize: 32, fontWeight: FontWeight.w900)),
+                              const SizedBox(height: 16),
+
+                              // UPI ID Pill
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                                decoration: BoxDecoration(
+                                  color: dialogIsDark ? dialogColors.textMain.withValues(alpha: 0.05) : dialogColors.bgTop,
+                                  borderRadius: BorderRadius.circular(20),
+                                  border: Border.all(color: dialogIsDark ? dialogColors.textMain.withValues(alpha: 0.1) : Colors.transparent),
+                                ),
+                                child: Text("UPI ID: $upiId", style: TextStyle(color: dialogColors.textMuted, fontSize: 12)),
+                              ),
+                            ] else ...[
+                              // Missing UPI Warning
+                              Container(
+                                padding: const EdgeInsets.all(16),
+                                decoration: BoxDecoration(
+                                    color: dialogColors.error.withValues(alpha: 0.1),
+                                    borderRadius: BorderRadius.circular(16)),
+                                child: Text(
+                                    "This faculty has not set up a UPI ID. Pay via cash or bank transfer.",
+                                    style: TextStyle(color: dialogColors.error, fontSize: 13, height: 1.4), textAlign: TextAlign.center),
+                              )
+                            ],
+
+                            const SizedBox(height: 32),
+
+                            // Action Buttons Stacked
+                            if (upiId.isNotEmpty) ...[
+                              SizedBox(
+                                width: double.infinity,
+                                height: 50,
+                                child: ElevatedButton.icon(
+                                    onPressed: () async {
+                                      try {
+                                        final Uri upiUrl = Uri.parse(upiString);
+                                        bool launched = await launchUrl(upiUrl, mode: LaunchMode.externalApplication);
+                                        if (launched) {
+                                          if (context.mounted) Navigator.pop(c, true);
+                                        } else {
+                                          if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: const Text("Could not launch UPI."), backgroundColor: dialogColors.error));
+                                        }
+                                      } catch (e) {
+                                        if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: const Text("No UPI App found."), backgroundColor: dialogColors.error));
+                                      }
+                                    },
+                                    icon: const Icon(Icons.touch_app, size: 18, color: Colors.white),
+                                    style: ElevatedButton.styleFrom(
+                                        backgroundColor: dialogColors.processing,
+                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
+                                    label: const Text("Open UPI App", style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold))
+                                ),
+                              ),
+                              const SizedBox(height: 12),
+                            ],
+
+                            SizedBox(
+                              width: double.infinity,
+                              height: 50,
+                              child: ElevatedButton.icon(
+                                  onPressed: () => Navigator.pop(c, true),
+                                  icon: Icon(Icons.check_circle, size: 18, color: dialogIsDark ? Colors.black : Colors.white),
+                                  style: ElevatedButton.styleFrom(
+                                      backgroundColor: dialogColors.success,
+                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
+                                  label: Text("Mark as Paid", style: TextStyle(color: dialogIsDark ? Colors.black : Colors.white, fontSize: 14, fontWeight: FontWeight.bold))
+                              ),
+                            ),
+                          ],
                         ),
                       ),
-                    ] else
-                      ...[
-                        const SizedBox(height: 24),
-                        Container(
-                          padding: const EdgeInsets.all(16),
-                          decoration: BoxDecoration(
-                              color: const Color(0xFFE05B5C).withValues(
-                                  alpha: 0.1),
-                              borderRadius: BorderRadius.circular(12)),
-                          child: const Text(
-                              "This faculty has not set up a UPI ID. Pay via cash or bank transfer.",
-                              style: TextStyle(color: const Color(0xFFE05B5C),
-                                  fontSize: 12,
-                                  height: 1.4), textAlign: TextAlign.center),
-                        )
-                      ]
-                  ],
-                ),
-              ),
-              actions: [
-                TextButton(
-                    onPressed: () => Navigator.pop(c, false),
-                    child: Text("Cancel", style: TextStyle(
-                        color: Colors.white.withValues(alpha: 0.5)))
-                ),
 
-                if (upiId.isNotEmpty)
-                  ElevatedButton.icon(
-                      onPressed: () async {
-                        try {
-                          final Uri upiUrl = Uri.parse(upiString);
-                          if (await canLaunchUrl(upiUrl)) {
-                            await launchUrl(
-                                upiUrl, mode: LaunchMode.externalApplication);
-                            if (context.mounted) Navigator.pop(c, true);
-                          } else {
-                            if (context.mounted) ScaffoldMessenger
-                                .of(context)
-                                .showSnackBar(const SnackBar(content: Text(
-                                "No UPI App found on this device.")));
-                          }
-                        } catch (e) {
-                          if (context.mounted) ScaffoldMessenger
-                              .of(context)
-                              .showSnackBar(const SnackBar(
-                              content: Text("Could not open UPI.")));
-                        }
-                      },
-                      icon: const Icon(
-                          Icons.touch_app, size: 16, color: Colors.white),
-                      style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF60A5FA),
-                          shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(10))),
-                      label: const Text("Open UPI", style: TextStyle(
-                          color: Colors.white, fontWeight: FontWeight.bold))
+                      // Top Right Close "X" Button
+                      Positioned(
+                        right: 8,
+                        top: 8,
+                        child: IconButton(
+                          icon: Icon(Icons.close, color: dialogColors.textMuted),
+                          onPressed: () => Navigator.pop(c, false),
+                        ),
+                      ),
+                    ],
                   ),
-
-                ElevatedButton(
-                    onPressed: () => Navigator.pop(c, true),
-                    style: ElevatedButton.styleFrom(
-                        backgroundColor: successGreen,
-                        shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(10))),
-                    child: const Text("Mark as Paid", style: TextStyle(
-                        color: Colors.black, fontWeight: FontWeight.bold))
                 ),
-              ],
-            )
+              );
+            }
+        )
     ) ?? false;
 
     if (confirm) {
@@ -651,108 +674,134 @@ class _AdminSalaryCard extends StatelessWidget {
       await NotificationService().sendPaymentProcessedNotification(uid: uid, amount: amount);
 
       if (context.mounted) {
+        final currentColors = ThemeManager.instance.colors;
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
             content: const Text("Payment Processed Successfully"),
-            backgroundColor: successGreen));
+            backgroundColor: currentColors.success));
       }
     }
   }
 }
 
-// ✅ NEW: Search Delegate to filter Faculty for Payments
-class SalarySearchDelegate extends SearchDelegate<String> {
-  @override
-  ThemeData appBarTheme(BuildContext context) {
-    return ThemeData(
-      appBarTheme: const AppBarTheme(
-        backgroundColor: Color(0xFF242832),
-        elevation: 0,
-        iconTheme: IconThemeData(color: Colors.white),
-      ),
-      scaffoldBackgroundColor: const Color(0xFF282C37),
-      textTheme: const TextTheme(
-        titleLarge: TextStyle(color: Colors.white, fontSize: 16),
-      ),
-      inputDecorationTheme: InputDecorationTheme(
-        hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.5)),
-        border: InputBorder.none,
-      ),
-    );
-  }
+// ============================================================================
+// THE BEAUTIFUL FLOATING SEARCH DIALOG (Matches the Dashboard!)
+// ============================================================================
+class FacultySearchDialog extends StatefulWidget {
+  const FacultySearchDialog({super.key});
 
   @override
-  List<Widget>? buildActions(BuildContext context) {
-    return [
-      if (query.isNotEmpty)
-        IconButton(
-          icon: const Icon(Icons.clear, color: Colors.white),
-          onPressed: () => query = '',
-        )
-    ];
-  }
+  State<FacultySearchDialog> createState() => _FacultySearchDialogState();
+}
+
+class _FacultySearchDialogState extends State<FacultySearchDialog> {
+  String query = '';
 
   @override
-  Widget? buildLeading(BuildContext context) {
-    return IconButton(
-      icon: const Icon(Icons.arrow_back, color: Colors.white),
-      onPressed: () => close(context, ''),
-    );
-  }
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+        animation: ThemeManager.instance,
+        builder: (context, child) {
+          final colors = ThemeManager.instance.colors;
+          final isDark = ThemeManager.instance.isDarkMode;
 
-  @override
-  Widget buildResults(BuildContext context) => _buildSearchResults();
+          return Dialog(
+            backgroundColor: Colors.transparent,
+            elevation: 0,
+            insetPadding: const EdgeInsets.all(20),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 600, maxHeight: 500),
+              child: Container(
+                decoration: BoxDecoration(
+                  color: colors.card,
+                  borderRadius: BorderRadius.circular(24),
+                  border: Border.all(color: isDark ? colors.textMain.withValues(alpha: 0.1) : Colors.transparent),
+                  boxShadow: isDark
+                      ? [BoxShadow(color: Colors.black.withValues(alpha: 0.3), blurRadius: 30, offset: const Offset(0, 10))]
+                      : [BoxShadow(color: Colors.black.withValues(alpha: 0.1), blurRadius: 30, offset: const Offset(0, 15))],
+                ),
+                child: Column(
+                  children: [
+                    // Search Input Bar
+                    Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: TextField(
+                        autofocus: true,
+                        style: TextStyle(color: colors.textMain, fontSize: 16),
+                        decoration: InputDecoration(
+                          hintText: "Search a faculty name to pay...",
+                          hintStyle: TextStyle(color: colors.textMuted),
+                          prefixIcon: Icon(Icons.search, color: colors.textMuted),
+                          filled: true,
+                          fillColor: isDark ? colors.bgBottom : colors.bgTop,
+                          contentPadding: const EdgeInsets.symmetric(vertical: 16),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
+                        ),
+                        onChanged: (val) {
+                          setState(() {
+                            query = val;
+                          });
+                        },
+                      ),
+                    ),
 
-  @override
-  Widget buildSuggestions(BuildContext context) => _buildSearchResults();
+                    Container(height: 1, color: colors.textMain.withValues(alpha: 0.05)),
 
-  Widget _buildSearchResults() {
-    if (query.isEmpty) {
-      return Center(
-        child: Text("Search a faculty name to pay...", style: TextStyle(color: Colors.white.withValues(alpha: 0.5))),
-      );
-    }
+                    // Search Results
+                    Expanded(
+                      child: query.isEmpty
+                          ? Center(
+                        child: Text("Type to search...", style: TextStyle(color: colors.textMuted, fontSize: 14)),
+                      )
+                          : StreamBuilder<QuerySnapshot>(
+                        stream: FirebaseFirestore.instance.collection('users').where('role', isEqualTo: 'faculty').snapshots(),
+                        builder: (context, snapshot) {
+                          if (!snapshot.hasData) {
+                            return Center(child: CircularProgressIndicator(color: colors.primary));
+                          }
 
-    return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance.collection('users').where('role', isEqualTo: 'faculty').snapshots(),
-      builder: (context, snapshot) {
-        if (!snapshot.hasData) {
-          return const Center(child: CircularProgressIndicator(color: Color(0xFFE05B5C)));
-        }
+                          final docs = snapshot.data!.docs.where((doc) {
+                            final data = doc.data() as Map<String, dynamic>;
+                            final name = (data['name'] ?? '').toString().toLowerCase();
+                            final q = query.toLowerCase();
+                            return name.contains(q);
+                          }).toList();
 
-        final docs = snapshot.data!.docs.where((doc) {
-          final data = doc.data() as Map<String, dynamic>;
-          final name = (data['name'] ?? '').toString().toLowerCase();
-          final q = query.toLowerCase();
-          return name.contains(q);
-        }).toList();
+                          if (docs.isEmpty) {
+                            return Center(
+                              child: Text("No faculty found matching '$query'.", style: TextStyle(color: colors.textMuted)),
+                            );
+                          }
 
-        if (docs.isEmpty) {
-          return Center(
-            child: Text("No faculty found matching '$query'.", style: TextStyle(color: Colors.white.withValues(alpha: 0.5))),
+                          return ListView.builder(
+                            itemCount: docs.length,
+                            physics: const BouncingScrollPhysics(),
+                            itemBuilder: (context, index) {
+                              final data = docs[index].data() as Map<String, dynamic>;
+                              final name = data['name'] ?? 'Unknown';
+                              final avatarBase64 = data['avatarBase64'];
+
+                              return ListTile(
+                                leading: CircleAvatar(
+                                  backgroundColor: isDark ? colors.textMain.withValues(alpha: 0.15) : colors.primary.withValues(alpha: 0.1),
+                                  backgroundImage: avatarBase64 != null && avatarBase64.isNotEmpty ? MemoryImage(base64Decode(avatarBase64)) : null,
+                                  child: (avatarBase64 == null || avatarBase64.isEmpty) ? Icon(Icons.person, color: isDark ? colors.textMain : colors.primary) : null,
+                                ),
+                                title: Text(name, style: TextStyle(color: colors.textMain, fontWeight: FontWeight.bold)),
+                                onTap: () {
+                                  Navigator.pop(context, data['uid'] ?? docs[index].id);
+                                },
+                              );
+                            },
+                          );
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
           );
         }
-
-        return ListView.builder(
-          itemCount: docs.length,
-          itemBuilder: (context, index) {
-            final data = docs[index].data() as Map<String, dynamic>;
-            final name = data['name'] ?? 'Unknown';
-            final avatarBase64 = data['avatarBase64'];
-
-            return ListTile(
-              leading: CircleAvatar(
-                backgroundColor: Colors.white.withValues(alpha: 0.15),
-                backgroundImage: avatarBase64 != null && avatarBase64.isNotEmpty ? MemoryImage(base64Decode(avatarBase64)) : null,
-                child: (avatarBase64 == null || avatarBase64.isEmpty) ? const Icon(Icons.person, color: Colors.white) : null,
-              ),
-              title: Text(name, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-              onTap: () {
-                close(context, data['uid'] ?? docs[index].id);
-              },
-            );
-          },
-        );
-      },
     );
   }
 }

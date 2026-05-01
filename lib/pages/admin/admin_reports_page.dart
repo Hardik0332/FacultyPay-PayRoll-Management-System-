@@ -1,3 +1,5 @@
+import 'package:animations/animations.dart';
+import 'package:animated_theme_switcher/animated_theme_switcher.dart';
 import 'dart:ui';
 import 'dart:convert';
 import 'package:flutter/material.dart';
@@ -5,7 +7,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart';
 
-// Make sure you have this import pointing to your actual service file!
+import '../../theme/theme_manager.dart'; // ✅ Added ThemeManager
 import '../../services/report_service.dart';
 
 class AdminReportsPage extends StatefulWidget {
@@ -17,10 +19,6 @@ class AdminReportsPage extends StatefulWidget {
 
 class _AdminReportsPageState extends State<AdminReportsPage> {
   final Color primaryRed = const Color(0xFFE05B5C);
-  final Color successGreen = const Color(0xFF4ADE80);
-  final Color pendingOrange = const Color(0xFFFBBF24);
-  final Color verifiedBlue = const Color(0xFF60A5FA);
-
   String? selectedFacultyId; // Null means "All Faculty"
   Map<String, String> facultyNames = {};
   Map<String, double> facultyRates = {};
@@ -74,7 +72,7 @@ class _AdminReportsPageState extends State<AdminReportsPage> {
     }
   }
 
-  Future<void> _pickMonth() async {
+  Future<void> _pickMonth(AppColors colors, bool isDark) async {
     final DateTime? picked = await showDatePicker(
       context: context,
       initialDate: _selectedMonth,
@@ -84,12 +82,9 @@ class _AdminReportsPageState extends State<AdminReportsPage> {
       builder: (context, child) {
         return Theme(
           data: Theme.of(context).copyWith(
-            colorScheme: ColorScheme.dark(
-              primary: primaryRed,
-              onPrimary: Colors.white,
-              surface: const Color(0xFF282C37),
-              onSurface: Colors.white,
-            ),
+            colorScheme: isDark
+                ? ColorScheme.dark(primary: colors.primary, onPrimary: Colors.white, surface: colors.card, onSurface: colors.textMain)
+                : ColorScheme.light(primary: colors.primary, onPrimary: Colors.white, surface: colors.card, onSurface: colors.textMain),
           ),
           child: child!,
         );
@@ -102,54 +97,69 @@ class _AdminReportsPageState extends State<AdminReportsPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Stack(
-      children: [
-        // 1. Background Gradient
-        Container(
-          decoration: const BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: [Color(0xFF3B4154), Color(0xFF1E212A)],
-            ),
-          ),
-        ),
+    return AnimatedBuilder(
+        animation: ThemeManager.instance,
+        builder: (context, child) {
+          final colors = ThemeManager.instance.colors;
+          final isDark = ThemeManager.instance.isDarkMode;
 
-        // 2. Main Content
-        SafeArea(
-          bottom: false,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+          return Stack(
             children: [
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
-                child: _buildHeader(),
+              // 1. Background Gradient (Dynamic)
+              Container(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [colors.bgTop, colors.bgBottom],
+                  ),
+                ),
               ),
 
-              // Main Form Container
-              Expanded(
-                child: Container(
-                  width: double.infinity,
-                  decoration: const BoxDecoration(
-                    color: Color(0xFF242832),
-                    borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
-                  ),
-                  child: RefreshIndicator(
-                    color: primaryRed,
-                    backgroundColor: const Color(0xFF2A2E39),
-                    onRefresh: _fetchFacultyData,
+              // 2. Main Content
+              SafeArea(
+                bottom: false,
+                child: Center(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 800),
                     child: SingleChildScrollView(
-                      physics: const AlwaysScrollableScrollPhysics(),
-                      padding: const EdgeInsets.only(top: 32, left: 20, right: 20, bottom: 120),
+                      physics: const BouncingScrollPhysics(),
                       child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text("Generate Reports", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white)),
-                          const SizedBox(height: 4),
-                          Text("Export attendance and payment liability as PDF.", style: TextStyle(color: Colors.white.withValues(alpha: 0.6), fontSize: 13)),
-                          const SizedBox(height: 24),
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
+                          child: _buildHeader(colors, isDark),
+                        ),
 
-                          _buildFilterCard(),
+                        // Main Form Container
+                        Container(
+                            width: double.infinity,
+                            decoration: BoxDecoration(
+                              color: colors.card, // ✅ DYNAMIC
+                              borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
+                              boxShadow: isDark ? [] : [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 20, offset: const Offset(0, -5))],
+                            ),
+                            child: RefreshIndicator(
+                              color: colors.primary,
+                              backgroundColor: colors.cardHighlight,
+                              onRefresh: _fetchFacultyData,
+                              child: Padding(
+                                padding: const EdgeInsets.only(top: 32, left: 20, right: 20, bottom: 120),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text("Generate Reports", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: colors.textMain)),
+                                    const SizedBox(height: 4),
+                                    Text("Export attendance and payment liability as PDF.", style: TextStyle(color: colors.textMuted, fontSize: 13)),
+                                    const SizedBox(height: 24),
+
+                                    _buildFilterCard(colors, isDark),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
                         ],
                       ),
                     ),
@@ -157,15 +167,14 @@ class _AdminReportsPageState extends State<AdminReportsPage> {
                 ),
               ),
             ],
-          ),
-        ),
-      ],
+          );
+        }
     );
   }
 
   // --- UI COMPONENTS ---
 
-  Widget _buildHeader() {
+  Widget _buildHeader(AppColors colors, bool isDark) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
@@ -175,19 +184,71 @@ class _AdminReportsPageState extends State<AdminReportsPage> {
             children: [
               Text("Admin Action", style: TextStyle(color: primaryRed, fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 1.5)),
               const SizedBox(height: 2),
-              const Text("Reports", style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold, color: Colors.white, letterSpacing: -0.5), overflow: TextOverflow.ellipsis),
+              Text("Reports", style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold, color: colors.textMain, letterSpacing: -0.5), overflow: TextOverflow.ellipsis),
             ],
           ),
         ),
         Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // ✅ FIXED: Added SearchDelegate to instantly pick a faculty for the dropdown
+            // Theme Toggle
+            // Theme Toggle
+            ThemeSwitcher(
+              clipper: const ThemeSwitcherCircleClipper(),
+              builder: (context) {
+                return GestureDetector(
+                  onTap: () {
+                    ThemeManager.instance.toggleTheme();
+                    final newColors = ThemeManager.instance.colors;
+                    final newIsDark = ThemeManager.instance.isDarkMode;
+                    ThemeSwitcher.of(context).changeTheme(
+                      theme: ThemeData(
+                        brightness: newIsDark ? Brightness.dark : Brightness.light,
+                        primaryColor: newColors.primary,
+                        scaffoldBackgroundColor: newIsDark ? Colors.black : newColors.bgBottom,
+                        cardColor: newColors.card,
+                        appBarTheme: AppBarTheme(
+                          backgroundColor: newColors.card,
+                          foregroundColor: newColors.textMain,
+                        ),
+                        useMaterial3: false,
+                        pageTransitionsTheme: const PageTransitionsTheme(
+                          builders: {
+                            TargetPlatform.android: SharedAxisPageTransitionsBuilder(transitionType: SharedAxisTransitionType.scaled),
+                            TargetPlatform.iOS: SharedAxisPageTransitionsBuilder(transitionType: SharedAxisTransitionType.scaled),
+                            TargetPlatform.windows: SharedAxisPageTransitionsBuilder(transitionType: SharedAxisTransitionType.scaled),
+                            TargetPlatform.macOS: SharedAxisPageTransitionsBuilder(transitionType: SharedAxisTransitionType.scaled),
+                            TargetPlatform.linux: SharedAxisPageTransitionsBuilder(transitionType: SharedAxisTransitionType.scaled),
+                          },
+                        ),
+                      ),
+                    );
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: isDark ? colors.textMain.withValues(alpha: 0.1) : colors.textMuted.withValues(alpha: 0.2),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      ThemeManager.instance.currentMode == AppThemeMode.system
+                          ? Icons.brightness_auto
+                          : (ThemeManager.instance.currentMode == AppThemeMode.light ? Icons.light_mode : Icons.dark_mode_outlined),
+                      color: ThemeManager.instance.currentMode == AppThemeMode.light ? Colors.amber : colors.textMain,
+                      size: 20,
+                    ),
+                  ),
+                );
+              }
+            ),
+            const SizedBox(width: 12),
+
+            // Search Dialog Button
             GestureDetector(
               onTap: () async {
-                final String? selectedUid = await showSearch<String>(
+                final String? selectedUid = await showDialog<String>(
                   context: context,
-                  delegate: ReportsSearchDelegate(),
+                  builder: (context) => const FacultySearchDialog(),
                 );
                 if (selectedUid != null && selectedUid.isNotEmpty) {
                   setState(() {
@@ -197,8 +258,8 @@ class _AdminReportsPageState extends State<AdminReportsPage> {
               },
               child: Container(
                   padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.15), shape: BoxShape.circle),
-                  child: const Icon(Icons.search, color: Colors.white, size: 20)
+                  decoration: BoxDecoration(color: isDark ? colors.textMain.withValues(alpha: 0.15) : colors.primary.withValues(alpha: 0.1), shape: BoxShape.circle),
+                  child: Icon(Icons.search, color: isDark ? Colors.white : colors.primary, size: 20)
               ),
             ),
             const SizedBox(width: 12),
@@ -214,9 +275,9 @@ class _AdminReportsPageState extends State<AdminReportsPage> {
                     onTap: () => Navigator.pushReplacementNamed(context, '/admin/profile'),
                     child: CircleAvatar(
                       radius: 18,
-                      backgroundColor: Colors.white.withValues(alpha: 0.15),
+                      backgroundColor: isDark ? colors.textMain.withValues(alpha: 0.15) : colors.primary,
                       backgroundImage: avatarBase64 != null && avatarBase64.isNotEmpty ? MemoryImage(base64Decode(avatarBase64)) : null,
-                      child: (avatarBase64 == null || avatarBase64.isEmpty) ? const Icon(Icons.person, color: Colors.white, size: 20) : null,
+                      child: (avatarBase64 == null || avatarBase64.isEmpty) ? Icon(Icons.person, color: isDark ? colors.textMain : Colors.white, size: 20) : null,
                     ),
                   );
                 }
@@ -227,50 +288,51 @@ class _AdminReportsPageState extends State<AdminReportsPage> {
     );
   }
 
-  Widget _buildFilterCard() {
+  Widget _buildFilterCard(AppColors colors, bool isDark) {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: const Color(0xFF2A2E39),
+        color: isDark ? colors.cardHighlight : colors.card,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
+        border: Border.all(color: isDark ? colors.textMain.withValues(alpha: 0.05) : Colors.transparent),
+        boxShadow: isDark ? [] : [BoxShadow(color: Colors.black.withValues(alpha: 0.03), blurRadius: 10, offset: const Offset(0, 4))],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _buildFacultyDropdown(),
+          _buildFacultyDropdown(colors, isDark),
           const SizedBox(height: 20),
-          _buildPeriodDropdown(),
+          _buildPeriodDropdown(colors, isDark),
           const SizedBox(height: 20),
-          _buildDynamicDateFilter(),
+          _buildDynamicDateFilter(colors, isDark),
           const SizedBox(height: 32),
-          _buildPrintButton(),
+          _buildPrintButton(colors),
         ],
       ),
     );
   }
 
-  Widget _buildFacultyDropdown() {
+  Widget _buildFacultyDropdown(AppColors colors, bool isDark) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text("Target Faculty", style: TextStyle(color: Colors.white.withValues(alpha: 0.6), fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
+        Text("Target Faculty", style: TextStyle(color: colors.textMuted, fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
         const SizedBox(height: 8),
         DropdownButtonFormField<String>(
           value: selectedFacultyId,
           isExpanded: true,
-          dropdownColor: const Color(0xFF2A2E39),
-          style: const TextStyle(color: Colors.white, fontSize: 15),
-          icon: Icon(Icons.arrow_drop_down, color: Colors.white.withValues(alpha: 0.5)),
+          dropdownColor: colors.card,
+          style: TextStyle(color: colors.textMain, fontSize: 15),
+          icon: Icon(Icons.arrow_drop_down, color: colors.textMuted),
           decoration: InputDecoration(
             hintText: "Select Faculty",
-            hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.2)),
-            prefixIcon: Icon(Icons.people_outline, color: Colors.white.withValues(alpha: 0.5), size: 20),
+            hintStyle: TextStyle(color: colors.textMuted.withValues(alpha: 0.5)),
+            prefixIcon: Icon(Icons.people_outline, color: colors.textMuted, size: 20),
             filled: true,
-            fillColor: Colors.white.withValues(alpha: 0.03),
+            fillColor: isDark ? colors.textMain.withValues(alpha: 0.03) : colors.bgTop,
             contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-            enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.05))),
-            focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide(color: primaryRed, width: 1.5)),
+            enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide(color: isDark ? colors.textMain.withValues(alpha: 0.1) : Colors.transparent)),
+            focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide(color: colors.primary, width: 1.5)),
           ),
           items: [
             const DropdownMenuItem(value: null, child: Text("All Faculty (Master Report)", overflow: TextOverflow.ellipsis)),
@@ -282,27 +344,27 @@ class _AdminReportsPageState extends State<AdminReportsPage> {
     );
   }
 
-  Widget _buildPeriodDropdown() {
+  Widget _buildPeriodDropdown(AppColors colors, bool isDark) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text("Time Period", style: TextStyle(color: Colors.white.withValues(alpha: 0.6), fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
+        Text("Time Period", style: TextStyle(color: colors.textMuted, fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
         const SizedBox(height: 8),
         DropdownButtonFormField<String>(
           value: _reportPeriod,
           isExpanded: true,
-          dropdownColor: const Color(0xFF2A2E39),
-          style: const TextStyle(color: Colors.white, fontSize: 15),
-          icon: Icon(Icons.arrow_drop_down, color: Colors.white.withValues(alpha: 0.5)),
+          dropdownColor: colors.card,
+          style: TextStyle(color: colors.textMain, fontSize: 15),
+          icon: Icon(Icons.arrow_drop_down, color: colors.textMuted),
           decoration: InputDecoration(
             hintText: "Select Period",
-            hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.2)),
-            prefixIcon: Icon(Icons.date_range, color: Colors.white.withValues(alpha: 0.5), size: 20),
+            hintStyle: TextStyle(color: colors.textMuted.withValues(alpha: 0.5)),
+            prefixIcon: Icon(Icons.date_range, color: colors.textMuted, size: 20),
             filled: true,
-            fillColor: Colors.white.withValues(alpha: 0.03),
+            fillColor: isDark ? colors.textMain.withValues(alpha: 0.03) : colors.bgTop,
             contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-            enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.05))),
-            focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide(color: primaryRed, width: 1.5)),
+            enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide(color: isDark ? colors.textMain.withValues(alpha: 0.1) : Colors.transparent)),
+            focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide(color: colors.primary, width: 1.5)),
           ),
           items: const [
             DropdownMenuItem(value: 'All Time', child: Text("All Time")),
@@ -315,21 +377,21 @@ class _AdminReportsPageState extends State<AdminReportsPage> {
     );
   }
 
-  Widget _buildDynamicDateFilter() {
+  Widget _buildDynamicDateFilter(AppColors colors, bool isDark) {
     if (_reportPeriod == 'Monthly') {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text("Select Month", style: TextStyle(color: Colors.white.withValues(alpha: 0.6), fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
+          Text("Select Month", style: TextStyle(color: colors.textMuted, fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
           const SizedBox(height: 8),
           GestureDetector(
-            onTap: _pickMonth,
+            onTap: () => _pickMonth(colors, isDark),
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
               decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.03),
+                color: isDark ? colors.textMain.withValues(alpha: 0.03) : colors.bgTop,
                 borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
+                border: Border.all(color: isDark ? colors.textMain.withValues(alpha: 0.05) : Colors.transparent),
               ),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -337,13 +399,13 @@ class _AdminReportsPageState extends State<AdminReportsPage> {
                   Expanded(
                     child: Row(
                       children: [
-                        Icon(Icons.calendar_month, color: Colors.white.withValues(alpha: 0.5), size: 20),
+                        Icon(Icons.calendar_month, color: colors.textMuted, size: 20),
                         const SizedBox(width: 12),
-                        Expanded(child: Text(DateFormat('MMMM yyyy').format(_selectedMonth), style: const TextStyle(color: Colors.white, fontSize: 15), overflow: TextOverflow.ellipsis)),
+                        Expanded(child: Text(DateFormat('MMMM yyyy').format(_selectedMonth), style: TextStyle(color: colors.textMain, fontSize: 15), overflow: TextOverflow.ellipsis)),
                       ],
                     ),
                   ),
-                  Icon(Icons.edit, color: Colors.white.withValues(alpha: 0.3), size: 18),
+                  Icon(Icons.edit, color: colors.textMuted, size: 18),
                 ],
               ),
             ),
@@ -354,20 +416,20 @@ class _AdminReportsPageState extends State<AdminReportsPage> {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text("Select Financial Year", style: TextStyle(color: Colors.white.withValues(alpha: 0.6), fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
+          Text("Select Financial Year", style: TextStyle(color: colors.textMuted, fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
           const SizedBox(height: 8),
           DropdownButtonFormField<String>(
             value: _selectedFY,
-            dropdownColor: const Color(0xFF2A2E39),
-            style: const TextStyle(color: Colors.white, fontSize: 15),
-            icon: Icon(Icons.arrow_drop_down, color: Colors.white.withValues(alpha: 0.5)),
+            dropdownColor: colors.card,
+            style: TextStyle(color: colors.textMain, fontSize: 15),
+            icon: Icon(Icons.arrow_drop_down, color: colors.textMuted),
             decoration: InputDecoration(
-              prefixIcon: Icon(Icons.account_balance, color: Colors.white.withValues(alpha: 0.5), size: 20),
+              prefixIcon: Icon(Icons.account_balance, color: colors.textMuted, size: 20),
               filled: true,
-              fillColor: Colors.white.withValues(alpha: 0.03),
+              fillColor: isDark ? colors.textMain.withValues(alpha: 0.03) : colors.bgTop,
               contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-              enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.05))),
-              focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide(color: primaryRed, width: 1.5)),
+              enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide(color: isDark ? colors.textMain.withValues(alpha: 0.05) : Colors.transparent)),
+              focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide(color: colors.primary, width: 1.5)),
             ),
             items: _getFinancialYearOptions().map((fy) => DropdownMenuItem(value: fy, child: Text("FY $fy"))).toList(),
             onChanged: (val) => setState(() => _selectedFY = val!),
@@ -378,26 +440,26 @@ class _AdminReportsPageState extends State<AdminReportsPage> {
     return const SizedBox.shrink();
   }
 
-  Widget _buildPrintButton() {
+  Widget _buildPrintButton(AppColors colors) {
     return GestureDetector(
-      onTap: isLoading ? null : _generateReport,
+      onTap: isLoading ? null : () => _generateReport(colors),
       child: Container(
         width: double.infinity,
         padding: const EdgeInsets.symmetric(vertical: 18),
         decoration: BoxDecoration(
-          color: isLoading ? successGreen.withValues(alpha: 0.5) : successGreen,
+          color: isLoading ? colors.primary.withValues(alpha: 0.5) : colors.primary,
           borderRadius: BorderRadius.circular(16),
-          boxShadow: [BoxShadow(color: successGreen.withValues(alpha: 0.2), blurRadius: 15, offset: const Offset(0, 5))],
+          boxShadow: [BoxShadow(color: colors.primary.withValues(alpha: 0.3), blurRadius: 15, offset: const Offset(0, 5))],
         ),
         child: Center(
           child: isLoading
-              ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(color: Colors.black, strokeWidth: 2))
+              ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
               : Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: const [
-              Icon(Icons.print, color: Colors.black, size: 20),
+              Icon(Icons.print, color: Colors.white, size: 20),
               SizedBox(width: 8),
-              Text("Generate PDF Report", style: TextStyle(color: Colors.black, fontSize: 16, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
+              Text("Generate PDF Report", style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
             ],
           ),
         ),
@@ -406,7 +468,7 @@ class _AdminReportsPageState extends State<AdminReportsPage> {
   }
 
   // --- REPORT GENERATION LOGIC ---
-  Future<void> _generateReport() async {
+  Future<void> _generateReport(AppColors colors) async {
     setState(() => isLoading = true);
 
     try {
@@ -448,13 +510,13 @@ class _AdminReportsPageState extends State<AdminReportsPage> {
       final snapshot = await query.get();
 
       if (snapshot.docs.isEmpty) {
-        if(mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("No records found for this selection.")));
+        if(mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: const Text("No records found for this selection."), backgroundColor: colors.warning));
       } else {
 
         double totalPaidAmount = 0.0;
         for (var doc in snapshot.docs) {
           final data = doc.data() as Map<String, dynamic>;
-          if (data['status'] == 'Paid') {
+          if (data['status'] == 'Paid' || data['status'] == 'Completed') {
             final uid = data['uid'] ?? '';
             final rate = facultyRates[uid] ?? 0.0;
             final lectures = data['lectures'] as int;
@@ -472,107 +534,135 @@ class _AdminReportsPageState extends State<AdminReportsPage> {
         );
       }
     } catch (e) {
-      if(mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: $e")));
+      if(mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: $e"), backgroundColor: colors.error));
     } finally {
       if(mounted) setState(() => isLoading = false);
     }
   }
 }
 
-// ✅ NEW: Custom Search Delegate to find Faculty and select them in the Dropdown
-class ReportsSearchDelegate extends SearchDelegate<String> {
-  @override
-  ThemeData appBarTheme(BuildContext context) {
-    return ThemeData(
-      appBarTheme: const AppBarTheme(
-        backgroundColor: Color(0xFF242832),
-        elevation: 0,
-        iconTheme: IconThemeData(color: Colors.white),
-      ),
-      scaffoldBackgroundColor: const Color(0xFF282C37),
-      textTheme: const TextTheme(
-        titleLarge: TextStyle(color: Colors.white, fontSize: 16),
-      ),
-      inputDecorationTheme: InputDecorationTheme(
-        hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.5)),
-        border: InputBorder.none,
-      ),
-    );
-  }
+// ============================================================================
+// THE BEAUTIFUL FLOATING SEARCH DIALOG (Matches the Dashboard!)
+// ============================================================================
+class FacultySearchDialog extends StatefulWidget {
+  const FacultySearchDialog({super.key});
 
   @override
-  List<Widget>? buildActions(BuildContext context) {
-    return [
-      if (query.isNotEmpty)
-        IconButton(
-          icon: const Icon(Icons.clear, color: Colors.white),
-          onPressed: () => query = '',
-        )
-    ];
-  }
+  State<FacultySearchDialog> createState() => _FacultySearchDialogState();
+}
+
+class _FacultySearchDialogState extends State<FacultySearchDialog> {
+  String query = '';
 
   @override
-  Widget? buildLeading(BuildContext context) {
-    return IconButton(
-      icon: const Icon(Icons.arrow_back, color: Colors.white),
-      onPressed: () => close(context, ''),
-    );
-  }
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+        animation: ThemeManager.instance,
+        builder: (context, child) {
+          final colors = ThemeManager.instance.colors;
+          final isDark = ThemeManager.instance.isDarkMode;
 
-  @override
-  Widget buildResults(BuildContext context) => _buildSearchResults();
+          return Dialog(
+            backgroundColor: Colors.transparent,
+            elevation: 0,
+            insetPadding: const EdgeInsets.all(20),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 600, maxHeight: 500),
+              child: Container(
+                decoration: BoxDecoration(
+                  color: colors.card,
+                  borderRadius: BorderRadius.circular(24),
+                  border: Border.all(color: isDark ? colors.textMain.withValues(alpha: 0.1) : Colors.transparent),
+                  boxShadow: isDark
+                      ? [BoxShadow(color: Colors.black.withValues(alpha: 0.3), blurRadius: 30, offset: const Offset(0, 10))]
+                      : [BoxShadow(color: Colors.black.withValues(alpha: 0.1), blurRadius: 30, offset: const Offset(0, 15))],
+                ),
+                child: Column(
+                  children: [
+                    // Search Input Bar
+                    Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: TextField(
+                        autofocus: true,
+                        style: TextStyle(color: colors.textMain, fontSize: 16),
+                        decoration: InputDecoration(
+                          hintText: "Search faculty by name or email...",
+                          hintStyle: TextStyle(color: colors.textMuted),
+                          prefixIcon: Icon(Icons.search, color: colors.textMuted),
+                          filled: true,
+                          fillColor: isDark ? colors.bgBottom : colors.bgTop,
+                          contentPadding: const EdgeInsets.symmetric(vertical: 16),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
+                        ),
+                        onChanged: (val) {
+                          setState(() {
+                            query = val;
+                          });
+                        },
+                      ),
+                    ),
 
-  @override
-  Widget buildSuggestions(BuildContext context) => _buildSearchResults();
+                    Container(height: 1, color: colors.textMain.withValues(alpha: 0.05)),
 
-  Widget _buildSearchResults() {
-    if (query.isEmpty) {
-      return Center(
-        child: Text("Search faculty by name for report...", style: TextStyle(color: Colors.white.withValues(alpha: 0.5))),
-      );
-    }
+                    // Search Results
+                    Expanded(
+                      child: query.isEmpty
+                          ? Center(
+                        child: Text("Type to search...", style: TextStyle(color: colors.textMuted, fontSize: 14)),
+                      )
+                          : StreamBuilder<QuerySnapshot>(
+                        stream: FirebaseFirestore.instance.collection('users').where('role', isEqualTo: 'faculty').snapshots(),
+                        builder: (context, snapshot) {
+                          if (!snapshot.hasData) {
+                            return Center(child: CircularProgressIndicator(color: colors.primary));
+                          }
 
-    return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance.collection('users').where('role', isEqualTo: 'faculty').snapshots(),
-      builder: (context, snapshot) {
-        if (!snapshot.hasData) {
-          return const Center(child: CircularProgressIndicator(color: Color(0xFFE05B5C)));
-        }
+                          final docs = snapshot.data!.docs.where((doc) {
+                            final data = doc.data() as Map<String, dynamic>;
+                            final name = (data['name'] ?? '').toString().toLowerCase();
+                            final email = (data['email'] ?? '').toString().toLowerCase();
+                            final q = query.toLowerCase();
+                            return name.contains(q) || email.contains(q);
+                          }).toList();
 
-        final docs = snapshot.data!.docs.where((doc) {
-          final data = doc.data() as Map<String, dynamic>;
-          final name = (data['name'] ?? '').toString().toLowerCase();
-          final q = query.toLowerCase();
-          return name.contains(q);
-        }).toList();
+                          if (docs.isEmpty) {
+                            return Center(
+                              child: Text("No faculty found matching '$query'.", style: TextStyle(color: colors.textMuted)),
+                            );
+                          }
 
-        if (docs.isEmpty) {
-          return Center(
-            child: Text("No faculty found matching '$query'.", style: TextStyle(color: Colors.white.withValues(alpha: 0.5))),
+                          return ListView.builder(
+                            itemCount: docs.length,
+                            physics: const BouncingScrollPhysics(),
+                            itemBuilder: (context, index) {
+                              final data = docs[index].data() as Map<String, dynamic>;
+                              final name = data['name'] ?? 'Unknown';
+                              final email = data['email'] ?? 'No email';
+                              final avatarBase64 = data['avatarBase64'];
+
+                              return ListTile(
+                                leading: CircleAvatar(
+                                  backgroundColor: isDark ? colors.textMain.withValues(alpha: 0.15) : colors.primary.withValues(alpha: 0.1),
+                                  backgroundImage: avatarBase64 != null && avatarBase64.isNotEmpty ? MemoryImage(base64Decode(avatarBase64)) : null,
+                                  child: (avatarBase64 == null || avatarBase64.isEmpty) ? Icon(Icons.person, color: isDark ? colors.textMain : colors.primary) : null,
+                                ),
+                                title: Text(name, style: TextStyle(color: colors.textMain, fontWeight: FontWeight.bold)),
+                                subtitle: Text(email, style: TextStyle(color: colors.textMuted)),
+                                onTap: () {
+                                  Navigator.pop(context, data['uid'] ?? docs[index].id);
+                                },
+                              );
+                            },
+                          );
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
           );
         }
-
-        return ListView.builder(
-          itemCount: docs.length,
-          itemBuilder: (context, index) {
-            final data = docs[index].data() as Map<String, dynamic>;
-            final name = data['name'] ?? 'Unknown';
-            final avatarBase64 = data['avatarBase64'];
-
-            return ListTile(
-              leading: CircleAvatar(
-                backgroundColor: Colors.white.withValues(alpha: 0.15),
-                backgroundImage: avatarBase64 != null && avatarBase64.isNotEmpty ? MemoryImage(base64Decode(avatarBase64)) : null,
-                child: (avatarBase64 == null || avatarBase64.isEmpty) ? const Icon(Icons.person, color: Colors.white) : null,
-              ),
-              title: Text(name, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-              onTap: () {
-                close(context, data['uid'] ?? docs[index].id);
-              },
-            );
-          },
-        );
-      },
     );
   }
 }

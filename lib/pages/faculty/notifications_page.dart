@@ -1,8 +1,11 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart';
+
+import '../../theme/theme_manager.dart'; // ✅ Added ThemeManager
 
 class NotificationsPage extends StatefulWidget {
   const NotificationsPage({super.key});
@@ -12,8 +15,16 @@ class NotificationsPage extends StatefulWidget {
 }
 
 class _NotificationsPageState extends State<NotificationsPage> {
-  final Color primaryRed = const Color(0xFFE05B5C);
   final User? currentUser = FirebaseAuth.instance.currentUser;
+
+  @override
+  void initState() {
+    super.initState();
+    // AUTO-CLEAR RED DOT
+    Future.delayed(const Duration(seconds: 1), () {
+      _markAllRead();
+    });
+  }
 
   Future<void> _markAllRead() async {
     if (currentUser == null) return;
@@ -50,158 +61,199 @@ class _NotificationsPageState extends State<NotificationsPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFF282C37),
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white, size: 20),
-          onPressed: () => Navigator.pop(context),
-        ),
-        title: const Text("Notifications", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-        centerTitle: true,
-        actions: [
-          TextButton(
-            onPressed: _markAllRead,
-            child: Text("Mark all read", style: TextStyle(color: primaryRed, fontSize: 12)),
-          )
-        ],
-      ),
-      body: Stack(
-        children: [
-          // Background Gradient
-          Container(
-            decoration: const BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [Color(0xFF3B4154), Color(0xFF1E212A)],
+    return AnimatedBuilder(
+        animation: ThemeManager.instance,
+        builder: (context, child) {
+          final colors = ThemeManager.instance.colors;
+          final isDark = ThemeManager.instance.isDarkMode;
+
+          return CallbackShortcuts(
+            bindings: {
+              const SingleActivator(LogicalKeyboardKey.escape): () {
+                if (Navigator.canPop(context)) {
+                  Navigator.pop(context);
+                }
+              },
+            },
+            child: Focus(
+              autofocus: true,
+              child: Scaffold(
+                backgroundColor: colors.bgBottom, // ✅ DYNAMIC
+                body: Stack(
+                  children: [
+                    // Background Gradient
+                    Container(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [colors.bgTop, colors.bgBottom], // ✅ DYNAMIC
+                        ),
+                      ),
+                    ),
+
+                    // Main Content
+                    Center(
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 700),
+                        child: SafeArea(
+                          child: Column(
+                            children: [
+                              // Custom Inline Header
+                              Padding(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    IconButton(
+                                      icon: Icon(Icons.arrow_back_ios_new, color: colors.textMain, size: 20),
+                                      onPressed: () => Navigator.pop(context),
+                                    ),
+                                    Text("Notifications", style: TextStyle(color: colors.textMain, fontWeight: FontWeight.bold, fontSize: 18)),
+                                    TextButton(
+                                      onPressed: _markAllRead,
+                                      child: Text("Mark all read", style: TextStyle(color: colors.primary, fontSize: 12, fontWeight: FontWeight.bold)),
+                                    )
+                                  ],
+                                ),
+                              ),
+
+                              // The Notification List
+                              Expanded(
+                                child: currentUser == null
+                                    ? Center(child: Text("Please login to view notifications", style: TextStyle(color: colors.textMuted)))
+                                    : StreamBuilder<QuerySnapshot>(
+                                  stream: FirebaseFirestore.instance
+                                      .collection('notifications')
+                                      .where('uid', isEqualTo: currentUser!.uid)
+                                      .snapshots(),
+                                  builder: (context, snapshot) {
+                                    if (snapshot.connectionState == ConnectionState.waiting) {
+                                      return Center(child: CircularProgressIndicator(color: colors.primary));
+                                    }
+
+                                    if (snapshot.hasError) {
+                                      return Center(child: Text("Error fetching notifications", style: TextStyle(color: colors.textMuted)));
+                                    }
+
+                                    if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                                      return Center(
+                                        child: Text("No notifications", style: TextStyle(color: colors.textMuted)),
+                                      );
+                                    }
+
+                                    List<QueryDocumentSnapshot> allDocs = snapshot.data!.docs.toList();
+
+                                    allDocs.sort((a, b) {
+                                      final aData = a.data() as Map<String, dynamic>;
+                                      final bData = b.data() as Map<String, dynamic>;
+                                      Timestamp? aTime = aData['timestamp'] as Timestamp?;
+                                      Timestamp? bTime = bData['timestamp'] as Timestamp?;
+                                      if (aTime == null || bTime == null) return 0;
+                                      return bTime.compareTo(aTime);
+                                    });
+
+                                    List<QueryDocumentSnapshot> todayNotifs = [];
+                                    List<QueryDocumentSnapshot> olderNotifs = [];
+
+                                    final now = DateTime.now();
+                                    final todayStart = DateTime(now.year, now.month, now.day);
+
+                                    for (var doc in allDocs) {
+                                      final data = doc.data() as Map<String, dynamic>;
+                                      final createdAt = data['timestamp'] as Timestamp?;
+                                      if (createdAt != null) {
+                                        final date = createdAt.toDate().toLocal();
+                                        if (date.isAfter(todayStart)) {
+                                          todayNotifs.add(doc);
+                                        } else {
+                                          olderNotifs.add(doc);
+                                        }
+                                      } else {
+                                        olderNotifs.add(doc);
+                                      }
+                                    }
+
+                                    return ListView(
+                                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                                      physics: const BouncingScrollPhysics(),
+                                      children: [
+                                        if (todayNotifs.isNotEmpty) ...[
+                                          Text("TODAY", style: TextStyle(color: colors.textMuted, fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 1)),
+                                          const SizedBox(height: 12),
+                                          ...todayNotifs.map((doc) => _buildNotificationItem(doc, colors, isDark)).toList(),
+                                          const SizedBox(height: 24),
+                                        ],
+                                        if (olderNotifs.isNotEmpty) ...[
+                                          Text("OLDER", style: TextStyle(color: colors.textMuted, fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 1)),
+                                          const SizedBox(height: 12),
+                                          ...olderNotifs.map((doc) => _buildNotificationItem(doc, colors, isDark)).toList(),
+                                        ],
+                                      ],
+                                    );
+                                  },
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    )
+                  ],
+                ),
               ),
             ),
-          ),
-
-          // Firebase Data Stream
-          currentUser == null
-              ? const Center(child: Text("Please login to view notifications", style: TextStyle(color: Colors.white)))
-              : StreamBuilder<QuerySnapshot>(
-            // ✅ REMOVED the .orderBy() to prevent the Firebase Index Error
-            stream: FirebaseFirestore.instance
-                .collection('notifications')
-                .where('uid', isEqualTo: currentUser!.uid)
-                .snapshots(),
-            builder: (context, snapshot) {
-              if (snapshot.connectionState == ConnectionState.waiting) {
-                return Center(child: CircularProgressIndicator(color: primaryRed));
-              }
-
-              if (snapshot.hasError) {
-                debugPrint("Notification Error: ${snapshot.error}");
-                return Center(child: Text("Error fetching notifications", style: TextStyle(color: Colors.white.withValues(alpha: 0.5))));
-              }
-
-              if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-                return Center(
-                  child: Text("No notifications", style: TextStyle(color: Colors.white.withValues(alpha: 0.5))),
-                );
-              }
-
-              // ✅ ADDED Local sorting in Dart
-              List<QueryDocumentSnapshot> allDocs = snapshot.data!.docs.toList();
-              allDocs.sort((a, b) {
-                final aData = a.data() as Map<String, dynamic>;
-                final bData = b.data() as Map<String, dynamic>;
-                Timestamp? aTime = aData['createdAt'] as Timestamp?;
-                Timestamp? bTime = bData['createdAt'] as Timestamp?;
-                if (aTime == null || bTime == null) return 0;
-                return bTime.compareTo(aTime); // Sorts newest first
-              });
-
-              // Separate notifications into sections
-              List<QueryDocumentSnapshot> todayNotifs = [];
-              List<QueryDocumentSnapshot> olderNotifs = [];
-
-              final now = DateTime.now();
-              final todayStart = DateTime(now.year, now.month, now.day);
-
-              for (var doc in allDocs) {
-                final data = doc.data() as Map<String, dynamic>;
-                final createdAt = data['createdAt'] as Timestamp?;
-                if (createdAt != null) {
-                  final date = createdAt.toDate();
-                  if (date.isAfter(todayStart)) {
-                    todayNotifs.add(doc);
-                  } else {
-                    olderNotifs.add(doc);
-                  }
-                } else {
-                  olderNotifs.add(doc);
-                }
-              }
-
-              return ListView(
-                padding: const EdgeInsets.all(20),
-                physics: const BouncingScrollPhysics(),
-                children: [
-                  if (todayNotifs.isNotEmpty) ...[
-                    const Text("TODAY", style: TextStyle(color: Colors.grey, fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 1)),
-                    const SizedBox(height: 12),
-                    ...todayNotifs.map((doc) => _buildNotificationItem(doc)).toList(),
-                    const SizedBox(height: 24),
-                  ],
-                  if (olderNotifs.isNotEmpty) ...[
-                    const Text("OLDER", style: TextStyle(color: Colors.grey, fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 1)),
-                    const SizedBox(height: 12),
-                    ...olderNotifs.map((doc) => _buildNotificationItem(doc)).toList(),
-                  ],
-                ],
-              );
-            },
-          )
-        ],
-      ),
+          );
+        }
     );
   }
 
-  Widget _buildNotificationItem(QueryDocumentSnapshot doc) {
+  Widget _buildNotificationItem(QueryDocumentSnapshot doc, AppColors colors, bool isDark) {
     final data = doc.data() as Map<String, dynamic>;
     final id = doc.id;
     final title = data['title'] ?? 'Notification';
-    final message = data['message'] ?? '';
+    final message = data['body'] ?? '';
     final isRead = data['isRead'] ?? false;
-    final type = data['type'] ?? 'info';
     final isUnread = !isRead;
 
-    // Default time formatting
+    String type = data['type'] ?? 'info';
+    if (data['type'] == null) {
+      if (title.toLowerCase().contains('approved') || title.toLowerCase().contains('processed')) {
+        type = 'success';
+      } else if (title.toLowerCase().contains('rejected')) {
+        type = 'error';
+      }
+    }
+
     String timeStr = "";
-    if (data['createdAt'] != null) {
-      final date = (data['createdAt'] as Timestamp).toDate();
+    if (data['timestamp'] != null) {
+      final date = (data['timestamp'] as Timestamp).toDate().toLocal();
       timeStr = DateFormat('hh:mm a, MMM dd').format(date);
     }
 
-    // Determine colors and icons based on type
-    Color iconColor = Colors.grey;
+    Color iconColor = colors.textMuted;
     IconData icon = Icons.notifications;
 
+    // ✅ Map notification types to Theme Colors
     switch (type) {
       case 'success':
-        iconColor = const Color(0xFF4ADE80);
+        iconColor = colors.success;
         icon = Icons.check_circle;
         break;
       case 'error':
-        iconColor = const Color(0xFFE05B5C);
+        iconColor = colors.error;
         icon = Icons.error;
         break;
       case 'info':
-        iconColor = const Color(0xFF60A5FA);
+        iconColor = colors.processing;
         icon = Icons.info;
         break;
       case 'warning':
-        iconColor = const Color(0xFFFBBF24);
+        iconColor = colors.warning;
         icon = Icons.warning_amber_rounded;
         break;
       default:
-        iconColor = primaryRed;
+        iconColor = colors.primary;
         icon = Icons.notifications;
     }
 
@@ -215,7 +267,7 @@ class _NotificationsPageState extends State<NotificationsPage> {
         margin: const EdgeInsets.only(bottom: 12),
         padding: const EdgeInsets.symmetric(horizontal: 20),
         decoration: BoxDecoration(
-          color: Colors.red.withValues(alpha: 0.8),
+          color: colors.error.withValues(alpha: 0.8), // Standard Red for delete
           borderRadius: BorderRadius.circular(16),
         ),
         alignment: Alignment.centerRight,
@@ -226,9 +278,13 @@ class _NotificationsPageState extends State<NotificationsPage> {
         child: Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: isUnread ? Colors.white.withValues(alpha: 0.05) : const Color(0xFF2A2E39),
+            // Unread notifications get a subtle tint of their icon color
+            color: isUnread
+                ? (isDark ? colors.textMain.withValues(alpha: 0.05) : iconColor.withValues(alpha: 0.05))
+                : colors.card,
             borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: isUnread ? iconColor.withValues(alpha: 0.3) : Colors.white.withValues(alpha: 0.05)),
+            border: Border.all(color: isUnread ? iconColor.withValues(alpha: 0.3) : (isDark ? colors.textMain.withValues(alpha: 0.05) : Colors.transparent)),
+            boxShadow: isDark ? [] : [BoxShadow(color: Colors.black.withValues(alpha: 0.03), blurRadius: 10, offset: const Offset(0, 4))],
           ),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -247,14 +303,14 @@ class _NotificationsPageState extends State<NotificationsPage> {
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Expanded(
-                          child: Text(title, style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis),
+                          child: Text(title, style: TextStyle(color: colors.textMain, fontSize: 15, fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis),
                         ),
                         const SizedBox(width: 8),
-                        Text(timeStr, style: TextStyle(color: Colors.white.withValues(alpha: 0.5), fontSize: 11)),
+                        Text(timeStr, style: TextStyle(color: colors.textMuted, fontSize: 11)),
                       ],
                     ),
                     const SizedBox(height: 6),
-                    Text(message, style: TextStyle(color: Colors.white.withValues(alpha: 0.7), fontSize: 13, height: 1.4)),
+                    Text(message, style: TextStyle(color: colors.textMuted, fontSize: 13, height: 1.4)),
                   ],
                 ),
               ),
@@ -263,7 +319,7 @@ class _NotificationsPageState extends State<NotificationsPage> {
                 Container(
                   margin: const EdgeInsets.only(top: 6),
                   width: 8, height: 8,
-                  decoration: const BoxDecoration(color: Color(0xFFE05B5C), shape: BoxShape.circle),
+                  decoration: BoxDecoration(color: colors.error, shape: BoxShape.circle), // Red dot for unread status
                 )
               ]
             ],

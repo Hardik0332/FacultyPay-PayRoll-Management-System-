@@ -5,6 +5,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 
+import '../../theme/theme_manager.dart'; // ✅ Added ThemeManager
+
 class AdminAddFacultyPage extends StatefulWidget {
   const AdminAddFacultyPage({super.key});
 
@@ -14,10 +16,6 @@ class AdminAddFacultyPage extends StatefulWidget {
 
 class _AdminAddFacultyPageState extends State<AdminAddFacultyPage> {
   final Color primaryRed = const Color(0xFFE05B5C);
-  final Color successGreen = const Color(0xFF4ADE80);
-  final Color pendingOrange = const Color(0xFFFBBF24);
-  final Color verifiedBlue = const Color(0xFF60A5FA);
-
   // --- CONTROLLERS & STATE ---
   final TextEditingController nameController = TextEditingController();
   final TextEditingController emailController = TextEditingController();
@@ -28,9 +26,9 @@ class _AdminAddFacultyPageState extends State<AdminAddFacultyPage> {
   bool isLoading = false;
 
   // --- FIREBASE SUBMIT LOGIC ---
-  Future<void> _saveFaculty() async {
+  Future<void> _saveFaculty(AppColors colors) async {
     if (nameController.text.isEmpty || emailController.text.isEmpty || passwordController.text.isEmpty || rateController.text.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: const Text("Please fill all required fields"), backgroundColor: primaryRed));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: const Text("Please fill all required fields"), backgroundColor: colors.error));
       return;
     }
 
@@ -63,7 +61,7 @@ class _AdminAddFacultyPageState extends State<AdminAddFacultyPage> {
       await tempApp.delete();
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: const Text("Faculty Added Successfully!"), backgroundColor: successGreen));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: const Text("Faculty Added Successfully!"), backgroundColor: colors.success));
         nameController.clear();
         emailController.clear();
         passwordController.clear();
@@ -75,7 +73,7 @@ class _AdminAddFacultyPageState extends State<AdminAddFacultyPage> {
         Navigator.pushReplacementNamed(context, '/admin/view-faculty');
       }
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: $e"), backgroundColor: primaryRed));
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: $e"), backgroundColor: colors.error));
     } finally {
       if (mounted) setState(() => isLoading = false);
     }
@@ -83,94 +81,104 @@ class _AdminAddFacultyPageState extends State<AdminAddFacultyPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Stack( // ✅ REMOVED SCAFFOLD, wrapped in Stack
-      children: [
-        // 1. Background Gradient
-        Container(
-          decoration: const BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: [Color(0xFF3B4154), Color(0xFF1E212A)],
-            ),
-          ),
-        ),
+    return AnimatedBuilder(
+        animation: ThemeManager.instance,
+        builder: (context, child) {
+          final colors = ThemeManager.instance.colors;
+          final isDark = ThemeManager.instance.isDarkMode;
 
-        // 2. Main Content
-        SafeArea(
-          bottom: false,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+          return Stack(
             children: [
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
-                child: _buildHeader(),
+              // Background Gradient (Dynamic)
+              Container(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [colors.bgTop, colors.bgBottom],
+                  ),
+                ),
               ),
 
-              // Main Form Container
-              Expanded(
-                child: Container(
-                  width: double.infinity,
-                  decoration: const BoxDecoration(
-                    color: Color(0xFF242832),
-                    borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
-                  ),
-                  child: SingleChildScrollView(
-                    physics: const BouncingScrollPhysics(),
-                    // ✅ CRITICAL FIX: 120px bottom padding to clear the nav bar!
-                    padding: const EdgeInsets.only(top: 32, left: 20, right: 20, bottom: 120),
+              SafeArea(
+                bottom: false,
+                child: Center(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 800),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text("Faculty Details", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white)),
-                        const SizedBox(height: 4),
-                        Text("Onboard a new faculty member to the system.", style: TextStyle(color: Colors.white.withValues(alpha: 0.6), fontSize: 13)),
-                        const SizedBox(height: 24),
-
-                        // Forms
-                        _buildEditableField("Full Name", Icons.person_outline, nameController, "e.g. Dr. Sarah Connor"),
-                        const SizedBox(height: 16),
-                        _buildEditableField("Email Address", Icons.email_outlined, emailController, "faculty@university.edu", keyboardType: TextInputType.emailAddress),
-                        const SizedBox(height: 16),
-                        _buildEditableField("Set Password", Icons.lock_outline, passwordController, "Login password", isPassword: true),
-
-                        const SizedBox(height: 32),
-                        Container(height: 1, color: Colors.white.withValues(alpha: 0.1)),
-                        const SizedBox(height: 24),
-
-                        const Text("Payment & Department", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white)),
-                        const SizedBox(height: 16),
-
-                        Row(
-                          children: [
-                            Expanded(child: _buildEditableField("Hourly Rate", Icons.currency_rupee, rateController, "0.00", keyboardType: TextInputType.number)),
-                            const SizedBox(width: 16),
-                            Expanded(child: _buildDepartmentDropdown()),
-                          ],
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
+                          child: _buildHeader(colors, isDark),
                         ),
-                        const SizedBox(height: 16),
 
-                        _buildEditableField("UPI ID (Optional)", Icons.qr_code, upiController, "e.g. john@ybl"),
+                        // Main Form Container
+                        Expanded(
+                          child: Container(
+                            width: double.infinity,
+                            decoration: BoxDecoration(
+                              color: colors.card, // ✅ DYNAMIC
+                              borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
+                              boxShadow: isDark ? [] : [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 20, offset: const Offset(0, -5))],
+                            ),
+                            child: SingleChildScrollView(
+                              physics: const BouncingScrollPhysics(),
+                              padding: const EdgeInsets.only(top: 32, left: 20, right: 20, bottom: 120),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text("Faculty Details", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: colors.textMain)),
+                                  const SizedBox(height: 4),
+                                  Text("Onboard a new faculty member to the system.", style: TextStyle(color: colors.textMuted, fontSize: 13)),
+                                  const SizedBox(height: 24),
 
-                        const SizedBox(height: 40),
+                                  // Forms
+                                  _buildEditableField("Full Name", Icons.person_outline, nameController, "e.g. Dr. Sarah Connor", colors, isDark),
+                                  const SizedBox(height: 16),
+                                  _buildEditableField("Email Address", Icons.email_outlined, emailController, "faculty@university.edu", colors, isDark, keyboardType: TextInputType.emailAddress),
+                                  const SizedBox(height: 16),
+                                  _buildEditableField("Set Password", Icons.lock_outline, passwordController, "Login password", colors, isDark, isPassword: true),
 
-                        // Save Button
-                        _buildSaveButton(),
+                                  const SizedBox(height: 32),
+                                  Container(height: 1, color: colors.textMain.withValues(alpha: 0.1)),
+                                  const SizedBox(height: 24),
+
+                                  Text("Payment & Department", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: colors.textMain)),
+                                  const SizedBox(height: 16),
+
+                                  Row(
+                                    children: [
+                                      Expanded(child: _buildEditableField("Hourly Rate", Icons.currency_rupee, rateController, "0.00", colors, isDark, keyboardType: TextInputType.number)),
+                                      const SizedBox(width: 16),
+                                      Expanded(child: _buildDepartmentDropdown(colors, isDark)),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 16),
+
+                                  _buildEditableField("UPI ID (Optional)", Icons.qr_code, upiController, "e.g. john@ybl", colors, isDark),
+
+                                  const SizedBox(height: 40),
+
+                                  // Save Button
+                                  _buildSaveButton(colors),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
                       ],
                     ),
                   ),
                 ),
               ),
             ],
-          ),
-        ),
-      ],
+          );
+        }
     );
   }
 
-  // --- UI COMPONENTS ---
-
-  Widget _buildHeader() {
+  Widget _buildHeader(AppColors colors, bool isDark) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
@@ -180,22 +188,50 @@ class _AdminAddFacultyPageState extends State<AdminAddFacultyPage> {
             children: [
               Text("Admin Action", style: TextStyle(color: primaryRed, fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 1.5)),
               const SizedBox(height: 2),
-              const Text("Add Faculty", style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold, color: Colors.white, letterSpacing: -0.5), overflow: TextOverflow.ellipsis),
+              Text("Add Faculty", style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold, color: colors.textMain, letterSpacing: -0.5), overflow: TextOverflow.ellipsis),
             ],
           ),
         ),
         Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // ✅ FIXED SEARCH BUTTON
+            // Theme Toggle
+            // Theme Toggle
             GestureDetector(
-              onTap: () {
-                showSearch(context: context, delegate: FacultySearchDelegate());
+              onTap: () => ThemeManager.instance.toggleTheme(),
+              child: Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: isDark ? colors.textMain.withValues(alpha: 0.1) : colors.textMuted.withValues(alpha: 0.2),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  ThemeManager.instance.currentMode == AppThemeMode.system
+                      ? Icons.brightness_auto
+                      : (ThemeManager.instance.currentMode == AppThemeMode.light ? Icons.light_mode : Icons.dark_mode_outlined),
+                  color: ThemeManager.instance.currentMode == AppThemeMode.light ? Colors.amber : colors.textMain,
+                  size: 20,
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+
+            // Floating dialog search
+            GestureDetector(
+              onTap: () async {
+                final String? selectedUid = await showDialog<String>(
+                  context: context,
+                  builder: (context) => const FacultySearchDialog(),
+                );
+
+                if (selectedUid != null && mounted) {
+                  Navigator.pushReplacementNamed(context, '/admin/view-faculty');
+                }
               },
               child: Container(
                   padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.15), shape: BoxShape.circle),
-                  child: const Icon(Icons.search, color: Colors.white, size: 20)
+                  decoration: BoxDecoration(color: isDark ? colors.textMain.withValues(alpha: 0.15) : colors.primary.withValues(alpha: 0.1), shape: BoxShape.circle),
+                  child: Icon(Icons.search, color: isDark ? Colors.white : colors.primary, size: 20)
               ),
             ),
             const SizedBox(width: 12),
@@ -208,12 +244,12 @@ class _AdminAddFacultyPageState extends State<AdminAddFacultyPage> {
                     avatarBase64 = data?['avatarBase64'];
                   }
                   return GestureDetector(
-                    onTap: () => Navigator.pushReplacementNamed(context, '/admin/profile'), // ✅ FIXED ROUTE
+                    onTap: () => Navigator.pushReplacementNamed(context, '/admin/profile'),
                     child: CircleAvatar(
                       radius: 18,
-                      backgroundColor: Colors.white.withValues(alpha: 0.15),
+                      backgroundColor: isDark ? colors.textMain.withValues(alpha: 0.15) : colors.primary,
                       backgroundImage: avatarBase64 != null && avatarBase64.isNotEmpty ? MemoryImage(base64Decode(avatarBase64)) : null,
-                      child: (avatarBase64 == null || avatarBase64.isEmpty) ? const Icon(Icons.person, color: Colors.white, size: 20) : null,
+                      child: (avatarBase64 == null || avatarBase64.isEmpty) ? Icon(Icons.person, color: isDark ? colors.textMain : Colors.white, size: 20) : null,
                     ),
                   );
                 }
@@ -224,44 +260,44 @@ class _AdminAddFacultyPageState extends State<AdminAddFacultyPage> {
     );
   }
 
-  Widget _buildEditableField(String label, IconData icon, TextEditingController controller, String hint, {bool isPassword = false, TextInputType? keyboardType}) {
+  Widget _buildEditableField(String label, IconData icon, TextEditingController controller, String hint, AppColors colors, bool isDark, {bool isPassword = false, TextInputType? keyboardType}) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label, style: TextStyle(color: Colors.white.withValues(alpha: 0.6), fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
+        Text(label, style: TextStyle(color: colors.textMuted, fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
         const SizedBox(height: 8),
         TextFormField(
           controller: controller,
           obscureText: isPassword,
           keyboardType: keyboardType,
-          style: const TextStyle(color: Colors.white, fontSize: 15),
+          style: TextStyle(color: colors.textMain, fontSize: 15),
           decoration: InputDecoration(
             hintText: hint,
-            hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.2)),
-            prefixIcon: Icon(icon, color: Colors.white.withValues(alpha: 0.5), size: 20),
+            hintStyle: TextStyle(color: colors.textMuted.withValues(alpha: 0.5)),
+            prefixIcon: Icon(icon, color: colors.textMuted, size: 20),
             filled: true,
-            fillColor: const Color(0xFF2A2E39),
+            fillColor: isDark ? colors.textMain.withValues(alpha: 0.03) : colors.bgTop,
             contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-            enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.05))),
-            focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide(color: primaryRed, width: 1.5)),
+            enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide(color: isDark ? colors.textMain.withValues(alpha: 0.1) : Colors.transparent)),
+            focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide(color: colors.primary, width: 1.5)),
           ),
         ),
       ],
     );
   }
 
-  Widget _buildDepartmentDropdown() {
+  Widget _buildDepartmentDropdown(AppColors colors, bool isDark) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text("Department", style: TextStyle(color: Colors.white.withValues(alpha: 0.6), fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
+        Text("Department", style: TextStyle(color: colors.textMuted, fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
         const SizedBox(height: 8),
         DropdownButtonFormField<String>(
-          value: selectedDepartment,
+          initialValue: selectedDepartment,
           isExpanded: true,
-          dropdownColor: const Color(0xFF2A2E39),
-          style: const TextStyle(color: Colors.white, fontSize: 15),
-          icon: Icon(Icons.arrow_drop_down, color: Colors.white.withValues(alpha: 0.5)),
+          dropdownColor: colors.card,
+          style: TextStyle(color: colors.textMain, fontSize: 15),
+          icon: Icon(Icons.arrow_drop_down, color: colors.textMuted),
           items: const [
             DropdownMenuItem(value: "cs", child: Text("Computer Science", overflow: TextOverflow.ellipsis)),
             DropdownMenuItem(value: "eng", child: Text("Engineering", overflow: TextOverflow.ellipsis)),
@@ -272,29 +308,29 @@ class _AdminAddFacultyPageState extends State<AdminAddFacultyPage> {
           onChanged: (v) => setState(() => selectedDepartment = v),
           decoration: InputDecoration(
             hintText: "Select",
-            hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.2)),
-            prefixIcon: Icon(Icons.business, color: Colors.white.withValues(alpha: 0.5), size: 20),
+            hintStyle: TextStyle(color: colors.textMuted.withValues(alpha: 0.5)),
+            prefixIcon: Icon(Icons.business, color: colors.textMuted, size: 20),
             filled: true,
-            fillColor: const Color(0xFF2A2E39),
+            fillColor: isDark ? colors.textMain.withValues(alpha: 0.03) : colors.bgTop,
             contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-            enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.05))),
-            focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide(color: primaryRed, width: 1.5)),
+            enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide(color: isDark ? colors.textMain.withValues(alpha: 0.1) : Colors.transparent)),
+            focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide(color: colors.primary, width: 1.5)),
           ),
         ),
       ],
     );
   }
 
-  Widget _buildSaveButton() {
+  Widget _buildSaveButton(AppColors colors) {
     return GestureDetector(
-      onTap: isLoading ? null : _saveFaculty,
+      onTap: isLoading ? null : () => _saveFaculty(colors),
       child: Container(
         width: double.infinity,
         padding: const EdgeInsets.symmetric(vertical: 18),
         decoration: BoxDecoration(
-          color: isLoading ? primaryRed.withValues(alpha: 0.5) : primaryRed,
+          color: isLoading ? colors.primary.withValues(alpha: 0.5) : colors.primary,
           borderRadius: BorderRadius.circular(20),
-          boxShadow: [BoxShadow(color: primaryRed.withValues(alpha: 0.3), blurRadius: 15, offset: const Offset(0, 5))],
+          boxShadow: [BoxShadow(color: colors.primary.withValues(alpha: 0.3), blurRadius: 15, offset: const Offset(0, 5))],
         ),
         child: Center(
           child: isLoading
@@ -306,111 +342,128 @@ class _AdminAddFacultyPageState extends State<AdminAddFacultyPage> {
   }
 }
 
-// ✅ NEW: Added FacultySearchDelegate to allow searching from the Add Faculty Page
-class FacultySearchDelegate extends SearchDelegate<String> {
-  @override
-  ThemeData appBarTheme(BuildContext context) {
-    return ThemeData(
-      appBarTheme: const AppBarTheme(
-        backgroundColor: Color(0xFF242832),
-        elevation: 0,
-        iconTheme: IconThemeData(color: Colors.white),
-      ),
-      scaffoldBackgroundColor: const Color(0xFF282C37),
-      textTheme: const TextTheme(
-        titleLarge: TextStyle(color: Colors.white, fontSize: 16),
-      ),
-      inputDecorationTheme: InputDecorationTheme(
-        hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.5)),
-        border: InputBorder.none,
-      ),
-    );
-  }
+// ============================================================================
+// THE BEAUTIFUL FLOATING SEARCH DIALOG (Matches the Dashboard!)
+// ============================================================================
+class FacultySearchDialog extends StatefulWidget {
+  const FacultySearchDialog({super.key});
 
   @override
-  List<Widget>? buildActions(BuildContext context) {
-    return [
-      if (query.isNotEmpty)
-        IconButton(
-          icon: const Icon(Icons.clear, color: Colors.white),
-          onPressed: () {
-            query = '';
-          },
-        )
-    ];
-  }
+  State<FacultySearchDialog> createState() => _FacultySearchDialogState();
+}
+
+class _FacultySearchDialogState extends State<FacultySearchDialog> {
+  String query = '';
 
   @override
-  Widget? buildLeading(BuildContext context) {
-    return IconButton(
-      icon: const Icon(Icons.arrow_back, color: Colors.white),
-      onPressed: () {
-        close(context, '');
-      },
-    );
-  }
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+        animation: ThemeManager.instance,
+        builder: (context, child) {
+          final colors = ThemeManager.instance.colors;
+          final isDark = ThemeManager.instance.isDarkMode;
 
-  @override
-  Widget buildResults(BuildContext context) {
-    return _buildSearchResults();
-  }
+          return Dialog(
+            backgroundColor: Colors.transparent,
+            elevation: 0,
+            insetPadding: const EdgeInsets.all(20),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 600, maxHeight: 500),
+              child: Container(
+                decoration: BoxDecoration(
+                  color: colors.card,
+                  borderRadius: BorderRadius.circular(24),
+                  border: Border.all(color: isDark ? colors.textMain.withValues(alpha: 0.1) : Colors.transparent),
+                  boxShadow: isDark
+                      ? [BoxShadow(color: Colors.black.withValues(alpha: 0.3), blurRadius: 30, offset: const Offset(0, 10))]
+                      : [BoxShadow(color: Colors.black.withValues(alpha: 0.1), blurRadius: 30, offset: const Offset(0, 15))],
+                ),
+                child: Column(
+                  children: [
+                    // Search Input Bar
+                    Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: TextField(
+                        autofocus: true,
+                        style: TextStyle(color: colors.textMain, fontSize: 16),
+                        decoration: InputDecoration(
+                          hintText: "Search faculty by name or email...",
+                          hintStyle: TextStyle(color: colors.textMuted),
+                          prefixIcon: Icon(Icons.search, color: colors.textMuted),
+                          filled: true,
+                          fillColor: isDark ? colors.bgBottom : colors.bgTop,
+                          contentPadding: const EdgeInsets.symmetric(vertical: 16),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
+                        ),
+                        onChanged: (val) {
+                          setState(() {
+                            query = val;
+                          });
+                        },
+                      ),
+                    ),
 
-  @override
-  Widget buildSuggestions(BuildContext context) {
-    return _buildSearchResults();
-  }
+                    Container(height: 1, color: colors.textMain.withValues(alpha: 0.05)),
 
-  Widget _buildSearchResults() {
-    if (query.isEmpty) {
-      return Center(
-        child: Text("Search existing faculty...", style: TextStyle(color: Colors.white.withValues(alpha: 0.5))),
-      );
-    }
+                    // Search Results
+                    Expanded(
+                      child: query.isEmpty
+                          ? Center(
+                        child: Text("Type to search...", style: TextStyle(color: colors.textMuted, fontSize: 14)),
+                      )
+                          : StreamBuilder<QuerySnapshot>(
+                        stream: FirebaseFirestore.instance.collection('users').where('role', isEqualTo: 'faculty').snapshots(),
+                        builder: (context, snapshot) {
+                          if (!snapshot.hasData) {
+                            return Center(child: CircularProgressIndicator(color: colors.primary));
+                          }
 
-    return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance.collection('users').where('role', isEqualTo: 'faculty').snapshots(),
-      builder: (context, snapshot) {
-        if (!snapshot.hasData) {
-          return const Center(child: CircularProgressIndicator(color: Color(0xFFE05B5C)));
-        }
+                          final docs = snapshot.data!.docs.where((doc) {
+                            final data = doc.data() as Map<String, dynamic>;
+                            final name = (data['name'] ?? '').toString().toLowerCase();
+                            final email = (data['email'] ?? '').toString().toLowerCase();
+                            final q = query.toLowerCase();
+                            return name.contains(q) || email.contains(q);
+                          }).toList();
 
-        final docs = snapshot.data!.docs.where((doc) {
-          final data = doc.data() as Map<String, dynamic>;
-          final name = (data['name'] ?? '').toString().toLowerCase();
-          final email = (data['email'] ?? '').toString().toLowerCase();
-          final q = query.toLowerCase();
-          return name.contains(q) || email.contains(q);
-        }).toList();
+                          if (docs.isEmpty) {
+                            return Center(
+                              child: Text("No faculty found matching '$query'.", style: TextStyle(color: colors.textMuted)),
+                            );
+                          }
 
-        if (docs.isEmpty) {
-          return Center(
-            child: Text("No faculty found matching '$query'.", style: TextStyle(color: Colors.white.withValues(alpha: 0.5))),
+                          return ListView.builder(
+                            itemCount: docs.length,
+                            physics: const BouncingScrollPhysics(),
+                            itemBuilder: (context, index) {
+                              final data = docs[index].data() as Map<String, dynamic>;
+                              final name = data['name'] ?? 'Unknown';
+                              final email = data['email'] ?? 'No email';
+                              final avatarBase64 = data['avatarBase64'];
+
+                              return ListTile(
+                                leading: CircleAvatar(
+                                  backgroundColor: isDark ? colors.textMain.withValues(alpha: 0.15) : colors.primary.withValues(alpha: 0.1),
+                                  backgroundImage: avatarBase64 != null && avatarBase64.isNotEmpty ? MemoryImage(base64Decode(avatarBase64)) : null,
+                                  child: (avatarBase64 == null || avatarBase64.isEmpty) ? Icon(Icons.person, color: isDark ? colors.textMain : colors.primary) : null,
+                                ),
+                                title: Text(name, style: TextStyle(color: colors.textMain, fontWeight: FontWeight.bold)),
+                                subtitle: Text(email, style: TextStyle(color: colors.textMuted)),
+                                onTap: () {
+                                  Navigator.pop(context, data['uid'] ?? docs[index].id);
+                                },
+                              );
+                            },
+                          );
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
           );
         }
-
-        return ListView.builder(
-          itemCount: docs.length,
-          itemBuilder: (context, index) {
-            final data = docs[index].data() as Map<String, dynamic>;
-            final name = data['name'] ?? 'Unknown';
-            final email = data['email'] ?? 'No email';
-            final avatarBase64 = data['avatarBase64'];
-
-            return ListTile(
-              leading: CircleAvatar(
-                backgroundColor: Colors.white.withValues(alpha: 0.15),
-                backgroundImage: avatarBase64 != null && avatarBase64.isNotEmpty ? MemoryImage(base64Decode(avatarBase64)) : null,
-                child: (avatarBase64 == null || avatarBase64.isEmpty) ? const Icon(Icons.person, color: Colors.white) : null,
-              ),
-              title: Text(name, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-              subtitle: Text(email, style: TextStyle(color: Colors.white.withValues(alpha: 0.6))),
-              onTap: () {
-                close(context, data['uid'] ?? docs[index].id);
-              },
-            );
-          },
-        );
-      },
     );
   }
 }
